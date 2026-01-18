@@ -552,6 +552,19 @@ bool validate_dns_revServers(union conf_value *val, const char *key, char err[VA
 			free(str);
 			return false;
 		}
+
+		// Ensure there are no newline characters in the entry
+		const unsigned int len = strlen(item->valuestring);
+		for(unsigned int k = 0; k < len; k++)
+		{
+			if(item->valuestring[k] == '\n' || item->valuestring[k] == '\r')
+			{
+				snprintf(err, VALIDATOR_ERRBUF_LEN, "%s[%d]: contains newline characters",
+				         key, i);
+				free(str);
+				return false;
+			}
+		}
 	}
 
 	// Return success
