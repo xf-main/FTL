@@ -410,7 +410,7 @@ void initConfig(struct config *conf)
 	conf->dns.upstreams.t = CONF_JSON_STRING_ARRAY;
 	conf->dns.upstreams.d.json = cJSON_CreateArray();
 	conf->dns.upstreams.f = FLAG_RESTART_FTL;
-	conf->dns.upstreams.c = validate_stub; // Type-based checking + dnsmasq syntax checking
+	conf->dns.upstreams.c = validate_array_no_newline;
 
 	conf->dns.CNAMEdeepInspect.k = "dns.CNAMEdeepInspect";
 	conf->dns.CNAMEdeepInspect.h = "Use this option to control deep CNAME inspection. Disabling it might be beneficial for very low-end devices";
@@ -537,7 +537,7 @@ void initConfig(struct config *conf)
 	conf->dns.hostRecord.t = CONF_STRING;
 	conf->dns.hostRecord.f = FLAG_RESTART_FTL;
 	conf->dns.hostRecord.d.s = (char*)"";
-	conf->dns.hostRecord.c = validate_stub; // Type-based checking + dnsmasq syntax checking
+	conf->dns.hostRecord.c = validate_str_no_newline;
 
 	conf->dns.listeningMode.k = "dns.listeningMode";
 	conf->dns.listeningMode.h = "Pi-hole interface listening modes";
@@ -816,7 +816,7 @@ void initConfig(struct config *conf)
 	conf->dhcp.leaseTime.t = CONF_STRING;
 	conf->dhcp.leaseTime.f = FLAG_RESTART_FTL;
 	conf->dhcp.leaseTime.d.s = (char*)"";
-	conf->dhcp.leaseTime.c = validate_stub; // Type-based checking + dnsmasq syntax checking
+	conf->dhcp.leaseTime.c = validate_str_no_newline;
 
 	conf->dhcp.ipv6.k = "dhcp.ipv6";
 	conf->dhcp.ipv6.h = "Should Pi-hole make an attempt to also satisfy IPv6 address requests (be aware that IPv6 works a whole lot different than IPv4)";
@@ -859,7 +859,7 @@ void initConfig(struct config *conf)
 	conf->dhcp.hosts.t = CONF_JSON_STRING_ARRAY;
 	conf->dhcp.hosts.f = FLAG_RESTART_FTL;
 	conf->dhcp.hosts.d.json = cJSON_CreateArray();
-	conf->dhcp.hosts.c = validate_stub; // Type-based checking + dnsmasq syntax checking
+	conf->dhcp.hosts.c = validate_array_no_newline;
 
 
 	// struct ntp
