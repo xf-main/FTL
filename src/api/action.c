@@ -59,6 +59,11 @@ static int run_and_stream_command(struct ftl_conn *api, const char *path, const 
 		if(extra_env != NULL)
 			setenv(extra_env, "1", 1);
 
+		// Detach child into its own session/process group so signals
+		// sent to the parent's process group (like SIGTERM) do not
+		// propagate to this child.
+		(void)setsid();
+
 		// Run pihole -g
 		execv(path, (char *const *)args);
 
