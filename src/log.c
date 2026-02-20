@@ -224,6 +224,8 @@ const char *debugstr(const enum debug_flag flag)
 			return "DEBUG_NTP";
 		case DEBUG_NETLINK:
 			return "DEBUG_NETLINK";
+		case DEBUG_TIMING:
+			return "DEBUG_TIMING";
 		case DEBUG_MAX:
 			return "DEBUG_MAX";
 		case DEBUG_NONE: // fall through
@@ -413,17 +415,17 @@ void FTL_log_helper(const unsigned int n, ...)
 	free(arg);
 }
 
-void format_memory_size(char prefix[2], const uint64_t bytes, double * const formatted)
+void format_memory_size(char prefix[2], const off_t bytes, double * const formatted)
 {
 	unsigned int i;
 	*formatted = bytes;
 	// Determine exponent for human-readable display
-	const char prefixes[] = { '\0', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y', 'R', '?' };
+	const char prefixes[] = { '\0', 'k', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y', 'R', '?' };
 	for(i = 0; i < sizeof(prefixes)/sizeof(*prefixes) - 1; i++)
 	{
-		if(*formatted <= 1e3)
+		if(*formatted <= 1024.0)
 			break;
-		*formatted /= 1e3;
+		*formatted /= 1024.0;
 	}
 	// Chose matching SI prefix
 	prefix[0] = prefixes[i];
@@ -567,8 +569,8 @@ const char __attribute__ ((const)) *get_ordinal_suffix(unsigned int number)
 // Converts a buffer of specified length to ASCII representation as it was a C
 // string literal. Returns how much bytes from source was processed
 // Inspired by https://stackoverflow.com/a/56123950
-int binbuf_to_escaped_C_literal(const char *src_buf, size_t src_sz,
-                                      char *dst_str, size_t dst_sz)
+static int binbuf_to_escaped_C_literal(const char *src_buf, size_t src_sz,
+                                       char *dst_str, size_t dst_sz)
 {
 	const char *src = src_buf;
 	char *dst = dst_str;
@@ -624,7 +626,7 @@ int binbuf_to_escaped_C_literal(const char *src_buf, size_t src_sz,
 					*dst++ = '0';
 					break;
 				default:
-					sprintf(dst, "0x%02X", (unsigned char)*src);
+					sprintf(dst, "\\x%02X", (unsigned char)*src);
 					dst += 4;
 					break;
 			}
@@ -654,14 +656,38 @@ int binbuf_to_escaped_C_literal(const char *src_buf, size_t src_sz,
  */
 char * __attribute__ ((malloc)) escape_string(const char *input)
 {
-	if(input == NULL)
+	return input == NULL ? NULL : escape_data(input, strlen(input));
+}
+
+/**
+ * @brief Escapes binary data to be printable as a C string literal.
+ *
+ * This function allocates a new string and converts the input buffer into an escaped
+ * C string literal, suitable for safe printing or logging. Each character in the source
+ * buffer may be escaped, so the output buffer is allocated with enough space for the
+ * worst-case scenario (every character is escaped as \xNN).
+ *
+ * @param src_buf Pointer to the source buffer to escape.
+ * @param src_sz  Size of the source buffer in bytes.
+ * @return Pointer to the newly allocated escaped string, or NULL on allocation or conversion failure.
+ *         The returned string must be freed by the caller.
+ */
+char * __attribute__((malloc)) escape_data(const char *src_buf, size_t src_sz)
+{
+	// Allocate memory for the escaped string
+	char *escaped_str = malloc(src_sz * 4 + 1); // Worst case: every char is escaped
+	if(!escaped_str)
 		return NULL;
-	const size_t inlen = strlen(input);
-	// Worst case: every character is escaped as "0x00" + zero-terminator
-	const size_t bufsiz = 4 * inlen + 1;
-	char *buffer = calloc(bufsiz, sizeof(char));
-	binbuf_to_escaped_C_literal(input, inlen, buffer, bufsiz);
-	return buffer;
+
+	// Convert buffer to escaped C literal
+	const int processed = binbuf_to_escaped_C_literal(src_buf, src_sz, escaped_str, src_sz * 4 + 1);
+	if(processed < 0)
+	{
+		free(escaped_str);
+		return NULL;
+	}
+
+	return escaped_str;
 }
 
 const char * __attribute__ ((pure)) short_path(const char *full_path)
@@ -736,6 +762,8 @@ void add_to_fifo_buffer(const enum fifo_logs which, const char *payload, const c
 
 bool flush_dnsmasq_log(void)
 {
+	const double mintime = double_time();
+
 	// Lock shared memory
 	lock_shm();
 
@@ -760,7 +788,6 @@ bool flush_dnsmasq_log(void)
 	unlock_shm();
 
 	// Flush last 24 hours of on-disk database
-	const double mintime = double_time();
 	if(!delete_old_queries_from_db(false, mintime))
 	{
 		log_err("Could not flush on-disk database");

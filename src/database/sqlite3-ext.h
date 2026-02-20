@@ -11,7 +11,20 @@
 #ifndef SQLITE3_EXT_H
 #define SQLITE3_EXT_H
 
+// int64_t
+#include <stdint.h>
+// size_t
+#include <stddef.h>
+
+struct sqlite3_memory_usage {
+        int64_t total;
+        int64_t highwater;
+        int64_t largest_block;
+        size_t current_allocations;
+};
+
 // Initialization point for SQLite3 extensions
 void pihole_sqlite3_initalize(void);
+struct sqlite3_memory_usage *sqlite3_mem_used(void) __attribute__((const));
 
 #endif // SQLITE3_EXT_H

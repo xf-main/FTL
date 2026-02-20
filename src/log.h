@@ -45,7 +45,7 @@ extern bool only_testing;
 void clear_debug_flags(void);
 void init_FTL_log(const char *name);
 void log_counter_info(void);
-void format_memory_size(char prefix[2], const uint64_t bytes, double * const formatted);
+void format_memory_size(char prefix[2], const off_t bytes, double * const formatted);
 void format_time(char buffer[42], unsigned long seconds, double milliseconds);
 unsigned int get_year(const time_t timein);
 const char *get_FTL_version(void);
@@ -74,8 +74,8 @@ void FTL_log_dnsmasq_fatal(const char *format, ...) __attribute__ ((format (prin
 void log_ctrl(bool vlog, bool vstdout);
 void FTL_log_helper(const unsigned int n, ...);
 
-int binbuf_to_escaped_C_literal(const char *src_buf, size_t src_sz, char *dst_str, size_t dst_sz);
 char *escape_string(const char *input) __attribute__ ((malloc));
+char *escape_data(const char *src_buf, size_t src_sz) __attribute__((malloc));
 
 const char *short_path(const char *full_path) __attribute__ ((pure));
 

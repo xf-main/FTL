@@ -41,6 +41,7 @@
 // Interfaces
 #include <ifaddrs.h>
 #include <net/if.h>
+#include <assert.h>
 
 // Define MIN and MAX macros, use them only when x and y are of the same type
 #define MAX(x,y) (((x) > (y)) ? (x) : (y))
@@ -133,6 +134,10 @@
 // How often should we update client vendor's from the MAC vendor database?
 // Default: 2592000 (once per month)
 #define DATABASE_MACVENDOR_INTERVAL 2592000
+
+// How often should we delete old queries from the database? [seconds]
+// Default: 86400 (once per day)
+#define DATABASE_DELETE_OLD_QUERIES_INTERVAL 86400
 
 // Over how many seconds should the query-per-second (QPS) value be averaged?
 // Default: 30 (seconds)

@@ -63,13 +63,6 @@ static const char *ftl_tables[] = {
 	"network_addresses"
 };
 
-// List of files to process from a Teleporter ZIP archive
-static const char *extract_files[] = {
-	"etc/pihole/pihole.toml",
-	"etc/pihole/dhcp.leases",
-	"etc/pihole/gravity.db"
-};
-
 // Create database in memory, copy selected tables to it, serialize and return a memory pointer to it
 static bool create_teleporter_database(const char *filename, const char **tables, const unsigned int num_tables,
                                        void **buffer, size_t *size)
@@ -506,12 +499,12 @@ static const char *test_and_import_database(void *ptr, size_t size, const char *
 	}
 
 	// End transaction
-	if(sqlite3_exec(database, "END TRANSACTION;", NULL, NULL, &err) != SQLITE_OK)
+	if(sqlite3_exec(database, "END", NULL, NULL, &err) != SQLITE_OK)
 	{
 		strncpy(hint, err, ERRBUF_SIZE);
 		sqlite3_free(err);
 		sqlite3_close(database);
-		return "Failed to end transaction";
+		return "Failed to commit transaction";
 	}
 
 	// Detach the database file from the in-memory database
@@ -559,6 +552,13 @@ const char *read_teleporter_zip(uint8_t *buffer, const size_t buflen, char * con
 			continue;
 		}
 
+		// List of files to process from a Teleporter ZIP archive
+		const char *extract_files[] = {
+			"etc/pihole/pihole.toml",
+			"etc/pihole/dhcp.leases",
+			config.files.gravity.v.s[0] == '/' ? config.files.gravity.v.s + 1 : config.files.gravity.v.s
+		};
+
 		// Check if this file is one of the files we want to extract and process
 		bool extract = false;
 		for(size_t j = 0; j < ArraySize(extract_files); j++)
@@ -570,7 +570,10 @@ const char *read_teleporter_zip(uint8_t *buffer, const size_t buflen, char * con
 			}
 		}
 		if(!extract)
+		{
+			log_info("Skipping file %s in Teleporter archive", file_stat.m_filename);
 			continue;
+		}
 
 		// Read file into its dedicated memory buffer
 		void *ptr = malloc(file_stat.m_uncomp_size);

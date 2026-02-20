@@ -98,7 +98,7 @@ static void subnet_match_impl(sqlite3_context *context, int argc, sqlite3_value 
 	// Convert the Internet host address into binary form in network byte order
 	// We use in6_addr as variable type here as it is guaranteed to be large enough
 	// for both, IPv4 and IPv6 addresses (128 bits variable size).
-	struct in6_addr saddrDB = {{{ 0 }}}, saddrFTL = {{{ 0 }}};
+	struct in6_addr saddrDB = {}, saddrFTL = {};
 	if (inet_pton(isIPv6_DB ? AF_INET6 : AF_INET, addrDB, &saddrDB) == 0)
 	{
 		// This may happen when trying to analyze a hostname, skip this entry and return NO MATCH (= 0)
@@ -228,6 +228,105 @@ static int sqlite3_pihole_extensions_init(sqlite3 *db, char **pzErrMsg, const st
 	return rc;
 }
 
+// The following logic implements lightweight memory allocation tracer for
+// SQLite3. It tracks the total amount of memory allocated by SQLite3 and makes
+// this information available via the sqlite3_mem_used() function. We do not use
+// the provided memory allocation tracing of SQLite3 as it does a lot more
+// bookkeeping which we do not need here and which significantly slows down
+// memory allocations.
+
+/* The original memory allocation routines */
+static sqlite3_mem_methods memtraceBase;
+struct sqlite3_memory_usage mem = { 0 };
+
+/* Methods that trace memory allocations */
+static void *memtraceMalloc(int n)
+{
+	// Allocate memory and track usage
+	const int m = memtraceBase.xRoundup(n);
+	mem.total += m;
+	if(mem.total > mem.highwater)
+		mem.highwater = mem.total;
+	if(m > mem.largest_block)
+		mem.largest_block = m;
+	mem.current_allocations++;
+	return memtraceBase.xMalloc(m);
+}
+
+static void memtraceFree(void *p)
+{
+	// Handle free of NULL pointer as no-op
+	if(p == NULL)
+		return;
+
+	// Free memory and track usage
+	mem.current_allocations--;
+	mem.total -= memtraceBase.xSize(p);
+	if(mem.total < 0)
+		mem.total = 0;
+	memtraceBase.xFree(p);
+}
+
+static void *memtraceRealloc(void *p, int n)
+{
+	// Handle realloc of NULL pointer as malloc
+	if(p == NULL)
+		return memtraceMalloc(n);
+
+	// Handle realloc to zero bytes as free
+	if(n == 0)
+	{
+		memtraceFree(p);
+		return 0;
+	}
+
+	// Reallocate memory and track usage
+	mem.total -= memtraceBase.xSize(p);
+	if(mem.total < 0)
+		mem.total = 0;
+	mem.total += memtraceBase.xRoundup(n);
+	return memtraceBase.xRealloc(p, n);
+}
+
+// xSize should return the allocated size of a memory allocation previously
+// obtained from xMalloc or xRealloc. The allocated size is always at least as
+// big as the requested size but may be larger.
+static int memtraceSize(void *p)
+{
+	return memtraceBase.xSize(p);
+}
+
+// The xRoundup method returns what would be the allocated size of a memory
+// allocation given a particular requested size.
+static int memtraceRoundup(int n)
+{
+	return memtraceBase.xRoundup(n);
+}
+
+// Initialize memory allocator
+static int memtraceInit(void *p)
+{
+	return memtraceBase.xInit(p);
+}
+
+// Shutdown memory allocator
+static void memtraceShutdown(void *p)
+{
+	memtraceBase.xShutdown(p);
+}
+
+/* The substitute memory allocator */
+static sqlite3_mem_methods ersatzMethods = {
+	memtraceMalloc,
+	memtraceFree,
+	memtraceRealloc,
+	memtraceSize,
+	memtraceRoundup,
+	memtraceInit,
+	memtraceShutdown,
+	0
+};
+
 /**
  * @brief Initializes the Pi-hole SQLite3 extensions and the SQLite3 engine.
  *
@@ -236,9 +335,36 @@ static int sqlite3_pihole_extensions_init(sqlite3 *db, char **pzErrMsg, const st
  */
 void pihole_sqlite3_initalize(void)
 {
-	// Register Pi-hole provided SQLite3 extensions (see sqlite3-ext.c)
+	// Set up memory allocation tracing
+	int rc = sqlite3_config(SQLITE_CONFIG_GETMALLOC, &memtraceBase);
+	if (rc == SQLITE_OK)
+	{
+		// Set our memory allocation tracing methods
+		rc = sqlite3_config(SQLITE_CONFIG_MALLOC, &ersatzMethods);
+		if (rc != SQLITE_OK)
+			log_warn("Error while setting up SQLite3 memory allocation tracing: %s",
+			         sqlite3_errstr(rc));
+	}
+	else
+	{
+		// Most likely, the database is already initialized at this
+		// point
+		log_warn("Error while retrieving SQLite3 memory allocation methods: %s",
+		         sqlite3_errstr(rc));
+	}
+
+	// Register Pi-hole provided SQLite3 extensions
+	// This may also initialize the database engine. It is, nonetheless,
+	// safe to call sqlite3_initialize() again afterwards and actually
+	// recommended as auto-init may be removed in future SQLite3 versions.
 	sqlite3_auto_extension((void (*)(void))sqlite3_pihole_extensions_init);
 
 	// Initialize the SQLite3 engine
 	sqlite3_initialize();
 }
+
+struct sqlite3_memory_usage * __attribute__((const)) sqlite3_mem_used(void)
+{
+	return &mem;
+}
+

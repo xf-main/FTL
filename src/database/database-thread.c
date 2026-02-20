@@ -26,34 +26,16 @@
 #include "database/aliasclients.h"
 // Eventqueue routines
 #include "events.h"
-// get_FTL_db_filesize()
+// get_FTL_db_stats()
 #include "files.h"
 // gravity_updated()
 #include "database/gravity-db.h"
-
-static bool delete_old_queries_in_DB(sqlite3 *db)
-{
-	// Delete old queries from the database but never more than 1% of the
-	// database at once to avoid long blocking times. Check out
-	// https://github.com/pi-hole/FTL/issues/1372 for details.
-	// As deleting database entries happens typically once per minute,
-	// this method could still delete 1440% of the database per day.
-	// Even when the database storing interval is set to 1 hour, this
-	// method would still delete 24% of the database per day so maxDBdays > 4
-	// does still work.
-	const time_t timestamp = time(NULL) - config.database.maxDBdays.v.ui * 86400;
-	SQL_bool(db, "DELETE FROM query_storage WHERE id IN (SELECT id FROM query_storage WHERE timestamp <= %lu LIMIT (SELECT COUNT(*)/100 FROM query_storage));",
-	         (unsigned long)timestamp);
-
-	// Get how many rows have been affected (deleted)
-	const int affected = sqlite3_changes(db);
-
-	// Print debug message
-	log_debug(DEBUG_DATABASE, "Size of %s is %.2f MB, deleted %i rows",
-	          config.files.database.v.s, 1e-6*get_FTL_db_filesize(), affected);
-
-	return true;
-}
+// parse_proc_meminfo()
+#include "procps.h"
+// sqlite3_mem_used()
+#include "database/sqlite3-ext.h"
+// PRId64
+#include <inttypes.h>
 
 static bool analyze_database(sqlite3 *db)
 {
@@ -77,6 +59,88 @@ static bool analyze_database(sqlite3 *db)
 	return true;
 }
 
+/**
+ * log_used_memory
+ *
+ * Gather and log memory-usage statistics for the process, SQLite and on-disk
+ * database tables. This helper is intended for periodic debugging/monitoring
+ * output and does not change program state.
+ *
+ * @return void
+ * @see parse_proc_meminfo(), getProcessMemory(), format_memory_size(),
+ *      sqlite3_mem_used(), get_FTL_db_stats(), get_row_count(), log_debug()
+ */
+static void log_used_memory(void)
+{
+	log_debug(DEBUG_TIMING, "Memory usage overview:");
+
+	struct proc_mem pmem = { 0 };
+	struct proc_meminfo mem = { 0 };
+	parse_proc_meminfo(&mem);
+	getProcessMemory(&pmem, mem.total);
+
+	char total_prefix[2] = { 0 };
+	double total_formatted = 0.0;
+	format_memory_size(total_prefix, (uint64_t)mem.total * 1024, &total_formatted);
+
+	char used_prefix[2] = { 0 };
+	double used_formatted = 0.0;
+	format_memory_size(used_prefix, (uint64_t)pmem.VmRSS * 1024, &used_formatted);
+
+	log_debug(DEBUG_TIMING, "  System: %.2f %sB used of %.2f %sB total (%.1f%%)",
+	         used_formatted, used_prefix, total_formatted, total_prefix, pmem.VmRSS_percent);
+	log_debug(DEBUG_TIMING, "  Process: VmSize: %lu kB, VmRSS: %lu kB, VmPeak: %lu kB, VmHWM: %lu kB",
+	         pmem.VmSize, pmem.VmRSS, pmem.VmPeak, pmem.VmHWM);
+
+	const struct sqlite3_memory_usage *sqlite3_memory = sqlite3_mem_used();
+	char sqlite3_mem_prefix[2] = { 0 };
+	double sqlite3_mem_formatted = 0.0;
+	format_memory_size(sqlite3_mem_prefix, sqlite3_memory->total, &sqlite3_mem_formatted);
+
+	char sqlite3_mem_highwater_prefix[2] = { 0 };
+	double sqlite3_mem_highwater_formatted = 0.0;
+	format_memory_size(sqlite3_mem_highwater_prefix, sqlite3_memory->highwater, &sqlite3_mem_highwater_formatted);
+
+	char sqlite3_mem_largest_block_prefix[2] = { 0 };
+	double sqlite3_mem_largest_block_formatted = 0.0;
+	format_memory_size(sqlite3_mem_largest_block_prefix, sqlite3_memory->largest_block, &sqlite3_mem_largest_block_formatted);
+
+	size_t memsize = 0;
+	get_memdb_size(&memsize, NULL);
+	char memdb_size_prefix[2] = { 0 };
+	double memdb_size_formatted = 0.0;
+	format_memory_size(memdb_size_prefix, memsize, &memdb_size_formatted);
+
+	log_debug(DEBUG_TIMING, "  SQLite3 (in-memory): %.2f %sB usage, high-water %.2f %sB, max. block %.2f %sB, %zu allocations, PRAGMA size: %.2f %sB",
+	         sqlite3_mem_formatted, sqlite3_mem_prefix,
+	         sqlite3_mem_highwater_formatted, sqlite3_mem_highwater_prefix,
+	         sqlite3_mem_largest_block_formatted, sqlite3_mem_largest_block_prefix,
+	         sqlite3_memory->current_allocations,
+	         memdb_size_formatted, memdb_size_prefix);
+	log_debug(DEBUG_TIMING, "    Table sizes: "
+	         "domain_by_id=%"PRId64", client_by_id=%"PRId64", forward_by_id=%"PRId64", addinfo_by_id=%"PRId64", query_storage=%"PRId64"",
+	          get_row_count("domain_by_id", true),
+	          get_row_count("client_by_id", true),
+	          get_row_count("forward_by_id", true),
+	          get_row_count("addinfo_by_id", true),
+	          get_row_count("query_storage", true));
+
+	// Log on-disk database file size
+	struct stat st;
+	get_FTL_db_stats(&st);
+	char db_size_prefix[2] = { 0 };
+	double db_size_formatted = 0.0;
+	format_memory_size(db_size_prefix, st.st_size, &db_size_formatted);
+	log_debug(DEBUG_TIMING, "  SQLite3 (on-disk): %.2f %sB", db_size_formatted, db_size_prefix);
+	log_debug(DEBUG_TIMING, "    Table sizes: "
+	         "domain_by_id=%"PRId64", client_by_id=%"PRId64", forward_by_id=%"PRId64", addinfo_by_id=%"PRId64", query_storage=%"PRId64"",
+	          get_row_count("domain_by_id", false),
+	          get_row_count("client_by_id", false),
+	          get_row_count("forward_by_id", false),
+	          get_row_count("addinfo_by_id", false),
+	          get_row_count("query_storage", false));
+}
+
 #define DBOPEN_OR_AGAIN() { if(!db) db = dbopen(false, false); if(!db) { thread_sleepms(DB, 5000); continue; } }
 #define DBCLOSE_OR_BREAK() { dbclose(&db); BREAK_IF_KILLED(); }
 
@@ -85,10 +149,21 @@ void *DB_thread(void *val)
 	// Set thread name
 	prctl(PR_SET_NAME, thread_names[DB], 0, 0, 0);
 
+	// Asynchronously import queries from the on-disk database
+	if(config.database.DBimport.v.b)
+		DB_read_queries();
+
+	// Log some information about the imported queries (if any)
+	log_counter_info();
+
+	// Random minute for daily cleaning task between 3:10 and 3:50 am
+	const int cleaning_minute = 10u + (rand() % 40);
+
 	// Save timestamp as we do not want to store immediately
 	// to the database
 	time_t before = time(NULL);
 	time_t lastDBsave = before - before%config.database.DBinterval.v.ui;
+	time_t lastDBdelete = before;
 
 	// Add some randomness (between one and two hours) to these timestamps
 	// to avoid them running at the same time and immediately after FTL was
@@ -96,6 +171,9 @@ void *DB_thread(void *val)
 	// FTL is running for a while.
 	time_t lastAnalyze = before + 3600 + (rand() % 3600);
 	time_t lastMACVendor = before + 3600 + (rand() % 3600);
+
+	// Last memory log timestamp
+	time_t lastMemLog = 0;
 
 	// This thread runs until shutdown of the process. We keep this thread
 	// running when pihole-FTL.db is corrupted because reloading of privacy
@@ -105,14 +183,19 @@ void *DB_thread(void *val)
 	{
 		const time_t now = time(NULL);
 
+		// Log memory usage once per ten minutes
+		if(config.debug.timing.v.b && now - lastMemLog >= 600)
+		{
+			log_used_memory();
+			lastMemLog = now;
+		}
+
 		// If the database is busy, no moving is happening and queries are retained in
 		// here until the next try. This ensures we cannot loose queries.
 		// Do this once per second
 		if(now > before)
 		{
-			lock_shm();
 			queries_to_database();
-			unlock_shm();
 			before = now;
 
 			// Check if we need to reload gravity
@@ -135,20 +218,7 @@ void *DB_thread(void *val)
 
 			// Save data to database
 			DBOPEN_OR_AGAIN();
-			export_queries_to_disk(false);
-
-			// Intermediate cancellation-point
-			if(killed)
-				break;
-
-			// Check if GC should be done on the database
-			if(DBdeleteoldqueries)
-			{
-				// No thread locks needed
-				delete_old_queries_in_DB(db);
-				DBdeleteoldqueries = false;
-			}
-
+			TIMED_DB_OP(export_queries_to_disk(false));
 			DBCLOSE_OR_BREAK();
 
 			// Parse neighbor cache (fill network table)
@@ -159,11 +229,26 @@ void *DB_thread(void *val)
 		if(killed)
 			break;
 
+		// Delete old queries from the database once per day between 3am
+		// and 4am
+		struct tm tm_now = { 0 };
+		localtime_r(&now, &tm_now);
+		if(tm_now.tm_hour == 3 && tm_now.tm_min > cleaning_minute &&
+		   now - lastDBdelete >= DATABASE_DELETE_OLD_QUERIES_INTERVAL)
+		{
+			// Update lastDBdelete timer to avoid multiple deletions
+			lastDBdelete = now;
+			const double mintime = now - (double)(config.database.maxDBdays.v.ui * 86400);
+			DBOPEN_OR_AGAIN();
+			TIMED_DB_OP(delete_old_queries_from_db(false, mintime));
+			DBCLOSE_OR_BREAK();
+		}
+
 		// Optimize database once per week
 		if(now - lastAnalyze >= DATABASE_ANALYZE_INTERVAL)
 		{
 			DBOPEN_OR_AGAIN();
-			analyze_database(db);
+			TIMED_DB_OP(analyze_database(db));
 			lastAnalyze = now;
 			DBCLOSE_OR_BREAK();
 		}
@@ -177,7 +262,7 @@ void *DB_thread(void *val)
 		if(now  - lastMACVendor >= DATABASE_MACVENDOR_INTERVAL)
 		{
 			DBOPEN_OR_AGAIN();
-			updateMACVendorRecords(db);
+			TIMED_DB_OP(updateMACVendorRecords(db));
 			lastMACVendor = now;
 			DBCLOSE_OR_BREAK();
 		}
@@ -190,7 +275,7 @@ void *DB_thread(void *val)
 		if(get_and_clear_event(PARSE_NEIGHBOR_CACHE))
 		{
 			DBOPEN_OR_AGAIN();
-			parse_neighbor_cache(db);
+			TIMED_DB_OP(parse_neighbor_cache(db));
 			DBCLOSE_OR_BREAK();
 		}
 
@@ -202,7 +287,7 @@ void *DB_thread(void *val)
 		{
 			DBOPEN_OR_AGAIN();
 			lock_shm();
-			reimport_aliasclients(db);
+			TIMED_DB_OP(reimport_aliasclients(db));
 			unlock_shm();
 			DBCLOSE_OR_BREAK();
 		}

@@ -137,21 +137,12 @@ bool directory_exists(const char *path)
 	return S_ISDIR(stats.st_mode);
 }
 
-bool get_database_stat(struct stat *st)
+off_t get_FTL_db_stats(struct stat *st)
 {
 	if(stat(config.files.database.v.s, st) == 0)
-		return true;
-
+		return st->st_size;
 	log_err("Cannot stat %s: %s", config.files.database.v.s, strerror(errno));
-	return false;
-}
-
-unsigned long long get_FTL_db_filesize(void)
-{
-	struct stat st;
-	if(get_database_stat(&st))
-		return st.st_size;
-	return 0llu;
+	return 0;
 }
 
 void get_permission_string(char permissions[10], struct stat *st)

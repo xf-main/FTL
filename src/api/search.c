@@ -82,7 +82,10 @@ static int search_table(struct ftl_conn *api, const char *item,
 		{
 			const int ret = parse_groupIDs(api, &table, row);
 			if(ret != 0)
+			{
+				gravityDB_readTableFinalize();
 				return ret;
+			}
 		}
 		else
 		{

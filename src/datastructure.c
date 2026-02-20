@@ -997,6 +997,37 @@ bool __attribute__ ((const)) is_blocked(const enum query_status status)
 	}
 }
 
+bool __attribute__ ((const)) is_forwarded(const enum query_status status)
+{
+	switch (status)
+	{
+		case QUERY_UNKNOWN:
+		case QUERY_GRAVITY:
+		case QUERY_CACHE:
+		case QUERY_REGEX:
+		case QUERY_DENYLIST:
+		case QUERY_EXTERNAL_BLOCKED_IP:
+		case QUERY_EXTERNAL_BLOCKED_NULL:
+		case QUERY_EXTERNAL_BLOCKED_NXRA:
+		case QUERY_EXTERNAL_BLOCKED_EDE15:
+		case QUERY_GRAVITY_CNAME:
+		case QUERY_REGEX_CNAME:
+		case QUERY_DENYLIST_CNAME:
+		case QUERY_DBBUSY:
+		case QUERY_SPECIAL_DOMAIN:
+		case QUERY_IN_PROGRESS:
+		case QUERY_CACHE_STALE:
+		case QUERY_STATUS_MAX:
+		default:
+			return false;
+
+		case QUERY_FORWARDED:
+		case QUERY_RETRIED:
+		case QUERY_RETRIED_DNSSEC:
+			return true;
+	}
+}
+
 static char blocked_list[32] = { 0 };
 const char * __attribute__ ((pure)) get_blocked_statuslist(void)
 {

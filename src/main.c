@@ -31,6 +31,10 @@
 #include "files.h"
 // init_entropy()
 #include "webserver/x509.h"
+// SQLite3LogCallback()
+#include "database/common.h"
+// pihole_sqlite3_initalize()
+#include "database/sqlite3-ext.h"
 
 char *username;
 bool startup = true;
@@ -63,9 +67,6 @@ int main (int argc, char *argv[])
 	timer_start(EXIT_TIMER);
 	log_info("########## FTL started on %s! ##########", hostname());
 	log_FTL_version(false);
-
-	// Initialize entropy and random number generator
-	init_entropy();
 
 	// Catch signals not handled by dnsmasq
 	// We configure real-time signals later (after dnsmasq has forked)
@@ -120,6 +121,16 @@ int main (int argc, char *argv[])
 	startup = false;
 	// Stop writing to STDOUT
 	log_ctrl(true, false);
+
+	// Initialize SQLite3 logging callback
+	// This ensures SQLite3 errors and warnings are logged to FTL.log
+	// We use this to possibly catch even more errors in places we do not
+	// explicitly check for failures to have happened
+	sqlite3_config(SQLITE_CONFIG_LOG, SQLite3LogCallback, NULL);
+
+	// Register Pi-hole provided SQLite3 extensions (see sqlite3-ext.c) and
+	// initialize SQLite3 engine
+	pihole_sqlite3_initalize();
 
 	// Call embedded dnsmasq only on the first run
 	// Skip it here if we jump back to this point from die()

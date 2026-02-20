@@ -252,6 +252,8 @@ components:
                       type: integer
                     upstreamBlockedTTL:
                       type: integer
+                    rrtype:
+                      type: string
                 revServers:
                   type: array
                   items:
@@ -404,6 +406,8 @@ components:
                   type: integer
                 useWAL:
                   type: boolean
+                forceDisk:
+                  type: boolean
                 network:
                   type: object
                   properties:
@@ -513,6 +517,8 @@ components:
                   type: string
                 database:
                   type: string
+                tmp_db:
+                  type: string
                 gravity:
                   type: string
                 gravity_tmp:
@@ -554,6 +560,8 @@ components:
                 normalizeCPU:
                   type: boolean
                 hide_dnsmasq_warn:
+                  type: boolean
+                hide_connection_error:
                   type: boolean
                 check:
                   type: object
@@ -624,6 +632,8 @@ components:
                 ntp:
                   type: boolean
                 netlink:
+                  type: boolean
+                timing:
                   type: boolean
                 all:
                   type: boolean
@@ -704,6 +714,7 @@ components:
               size: 10000
               optimizer: 3600
               upstreamBlockedTTL: 86400
+              rrtype: "ANY"
             revServers:
               - "true,192.168.0.0/24,192.168.0.1,lan"
             blocking:
@@ -769,6 +780,7 @@ components:
             maxDBdays: 365
             DBinterval: 60
             useWAL: true
+            forceDisk: false
             network:
               parseARPcache: true
               expire: 365
@@ -779,7 +791,7 @@ components:
             threads: 0
             headers:
               - "X-DNS-Prefetch-Control: off"
-              - "Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+              - "Content-Security-Policy: default-src 'none'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; img-src 'self'; manifest-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
               - "X-Frame-Options: DENY"
               - "X-XSS-Protection: 0"
               - "X-Content-Type-Options: nosniff"
@@ -821,6 +833,7 @@ components:
           files:
             pid: "/run/pihole-FTL.pid"
             database: "/etc/pihole/pihole-FTL.db"
+            tmp_db: "/etc/pihole/pihole-tmp.db"
             gravity: "/etc/pihole/gravity.db"
             gravity_tmp: "/tmp"
             macvendor: "/etc/pihole/macvendor.db"
@@ -840,6 +853,7 @@ components:
             readOnly: false
             normalizeCPU: false
             hide_dnsmasq_warn: false
+            hide_connection_error: false
             check:
               load: true
               shmem: 90
@@ -874,6 +888,7 @@ components:
             reserved: false
             ntp: false
             netlink: false
+            timing: false
             all: false
           took: 0.003
     config_one:

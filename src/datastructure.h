@@ -50,7 +50,7 @@ typedef struct {
 		bool response_calculated :1;
 		struct database_flags {
 			bool changed :1;
-			bool stored :1;
+			bool imported :1;
 		} database;
 	} flags;
 } queriesData;
@@ -147,6 +147,7 @@ bool isValidIPv6(const char *addr);
 
 bool is_blocked(const enum query_status status) __attribute__ ((const));
 bool is_cached(const enum query_status status) __attribute__ ((const));
+bool is_forwarded(const enum query_status status) __attribute__ ((const));
 const char *get_blocked_statuslist(void) __attribute__ ((pure));
 const char *get_cached_statuslist(void) __attribute__ ((pure));
 const char *get_permitted_statuslist(void) __attribute__ ((pure));

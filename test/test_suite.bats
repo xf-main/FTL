@@ -2142,29 +2142,26 @@
   [[ "${lines[11]}" == "  subject alt name  :" ]]
   [[ "${lines[12]}" == "      dNSName : pi.hole" ]]
   [[ "${lines[13]}" == "Private key:" ]]
-  [[ "${lines[14]}" == "  Type: EC" ]]
-  [[ "${lines[15]}" == "  Curve type: Short Weierstrass (y^2 = x^3 + a x + b)" ]]
-  [[ "${lines[16]}" == "  Bitlen:  383 bit" ]]
-  [[ "${lines[17]}" == "  Private key:" ]]
-  [[ "${lines[18]}" == "    D = 0x465886D0D75BFCB108EB963F8A512ECE26847433DC7267230B8647A3B5794718D5E7DA52BC6733D651403AF99AA0740F"* ]]
-  [[ "${lines[19]}" == "  Public key:" ]]
-  [[ "${lines[20]}" == "    X = 0xB87EEC59F19192F9B9B392D5613C1B33A3E3666B8AE0A3E1039A9A59F56A270E23784324BF24F808AB62AEE2C405CAB3"* ]]
-  [[ "${lines[21]}" == "    Y = 0x8A690184FE9D94C39433F2B471A442E499B8E9F302F5B577EF889B617C625F86E48AEF26FC60E3339460892D43D71F94"* ]]
-  [[ "${lines[22]}" == "    Z = 0x01"* ]]
-  [[ "${lines[23]}" == "Private key (PEM):" ]]
-  [[ "${lines[24]}" == "-----BEGIN EC PRIVATE KEY-----" ]]
-  [[ "${lines[25]}" == "MIGkAgEBBDBGWIbQ11v8sQjrlj+KUS7OJoR0M9xyZyMLhkejtXlHGNXn2lK8ZzPW" ]]
-  [[ "${lines[26]}" == "UUA6+ZqgdA+gBwYFK4EEACKhZANiAAS4fuxZ8ZGS+bmzktVhPBszo+Nma4rgo+ED" ]]
-  [[ "${lines[27]}" == "mppZ9WonDiN4QyS/JPgIq2Ku4sQFyrOKaQGE/p2Uw5Qz8rRxpELkmbjp8wL1tXfv" ]]
-  [[ "${lines[28]}" == "iJthfGJfhuSK7yb8YOMzlGCJLUPXH5Q=" ]]
-  [[ "${lines[29]}" == "-----END EC PRIVATE KEY-----" ]]
-  [[ "${lines[30]}" == "Public key (PEM):" ]]
-  [[ "${lines[31]}" == "-----BEGIN PUBLIC KEY-----" ]]
-  [[ "${lines[32]}" == "MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEuH7sWfGRkvm5s5LVYTwbM6PjZmuK4KPh" ]]
-  [[ "${lines[33]}" == "A5qaWfVqJw4jeEMkvyT4CKtiruLEBcqzimkBhP6dlMOUM/K0caRC5Jm46fMC9bV3" ]]
-  [[ "${lines[34]}" == "74ibYXxiX4bkiu8m/GDjM5RgiS1D1x+U" ]]
-  [[ "${lines[35]}" == "-----END PUBLIC KEY-----" ]]
-  [[ "${lines[36]}" == "" ]]
+  [[ "${lines[14]}" == "  ID: 0" ]]
+  [[ "${lines[15]}" == "  Keysize: 384 bits" ]]
+  [[ "${lines[16]}" == "  Algorithm: 151126016" ]]
+  [[ "${lines[17]}" == "  Lifetime: 0" ]]
+  [[ "${lines[18]}" == "  Type: ECC (key pair)" ]]
+  [[ "${lines[19]}" == "  Curvetype: SEC random curve over prime fields (secp384r1)" ]]
+  [[ "${lines[20]}" == "Private key (PEM):" ]]
+  [[ "${lines[21]}" == "-----BEGIN EC PRIVATE KEY-----" ]]
+  [[ "${lines[22]}" == "MIGkAgEBBDBGWIbQ11v8sQjrlj+KUS7OJoR0M9xyZyMLhkejtXlHGNXn2lK8ZzPW" ]]
+  [[ "${lines[23]}" == "UUA6+ZqgdA+gBwYFK4EEACKhZANiAAS4fuxZ8ZGS+bmzktVhPBszo+Nma4rgo+ED" ]]
+  [[ "${lines[24]}" == "mppZ9WonDiN4QyS/JPgIq2Ku4sQFyrOKaQGE/p2Uw5Qz8rRxpELkmbjp8wL1tXfv" ]]
+  [[ "${lines[25]}" == "iJthfGJfhuSK7yb8YOMzlGCJLUPXH5Q=" ]]
+  [[ "${lines[26]}" == "-----END EC PRIVATE KEY-----" ]]
+  [[ "${lines[27]}" == "Public key (PEM):" ]]
+  [[ "${lines[28]}" == "-----BEGIN PUBLIC KEY-----" ]]
+  [[ "${lines[29]}" == "MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEuH7sWfGRkvm5s5LVYTwbM6PjZmuK4KPh" ]]
+  [[ "${lines[30]}" == "A5qaWfVqJw4jeEMkvyT4CKtiruLEBcqzimkBhP6dlMOUM/K0caRC5Jm46fMC9bV3" ]]
+  [[ "${lines[31]}" == "74ibYXxiX4bkiu8m/GDjM5RgiS1D1x+U" ]]
+  [[ "${lines[32]}" == "-----END PUBLIC KEY-----" ]]
+  [[ "${lines[33]}" == "" ]]
 }
 
 @test "X.509 certificate parser can check if domain is included" {
@@ -2187,12 +2184,12 @@
   printf "Compression output:\n"
   printf "%s\n" "${lines[@]}"
   [[ $status == 0 ]]
-  [[ ${lines[0]} == "Compressed test/pihole-FTL.db.sql (2.0KB) to test/pihole-FTL.db.sql.gz (689.0B), 66.0% size reduction" ]]
+  [[ ${lines[0]} == "Compressed test/pihole-FTL.db.sql (2.0kB) to test/pihole-FTL.db.sql.gz (689.0B), 66.0% size reduction" ]]
   printf "Uncompress (FTL) output:\n"
   run bash -c './pihole-FTL gzip test/pihole-FTL.db.sql.gz test/pihole-FTL.db.sql.1'
   printf "%s\n" "${lines[@]}"
   [[ $status == 0 ]]
-  [[ ${lines[0]} == "Uncompressed test/pihole-FTL.db.sql.gz (677.0B) to test/pihole-FTL.db.sql.1 (2.0KB), 199.3% size increase" ]]
+  [[ ${lines[0]} == "Uncompressed test/pihole-FTL.db.sql.gz (677.0B) to test/pihole-FTL.db.sql.1 (2.0kB), 199.3% size increase" ]]
   printf "Uncompress (gzip) output:\n"
   run bash -c 'gzip -dkc test/pihole-FTL.db.sql.gz > test/pihole-FTL.db.sql.2'
   printf "%s\n" "${lines[@]}"
@@ -2327,7 +2324,7 @@
   [[ $status == 0 ]]
   run bash -c 'grep -F "Webserver option 6/12: authentication_domain=pi.hole" /var/log/pihole/FTL.log'
   [[ $status == 0 ]]
-  run bash -c 'grep -F "Webserver option 7/12: additional_header=X-DNS-Prefetch-Control: off\r\nContent-Security-Policy: default-src '"'self'"'; style-src '"'self'"' '"'unsafe-inline'"'; img-src '"'self'"' data:;\r\nX-Frame-Options: DENY\r\nX-XSS-Protection: 0\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: strict-origin-when-cross-origin\r\n" /var/log/pihole/FTL.log'
+  run bash -c 'grep -F "Webserver option 7/12: additional_header=X-DNS-Prefetch-Control: off\r\nContent-Security-Policy: default-src '"'none'"'; connect-src '"'self'"'; font-src '"'self'"'; frame-ancestors '"'none'"'; img-src '"'self'"'; manifest-src '"'self'"'; script-src '"'self'"'; style-src '"'self'"' '"'unsafe-inline'"'\r\nX-Frame-Options: DENY\r\nX-XSS-Protection: 0\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: strict-origin-when-cross-origin\r\n" /var/log/pihole/FTL.log'
   [[ $status == 0 ]]
   run bash -c 'grep -F "Webserver option 8/12: index_files=index.html,index.htm,index.lp" /var/log/pihole/FTL.log'
   [[ $status == 0 ]]

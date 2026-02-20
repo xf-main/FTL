@@ -2,6 +2,43 @@ import re
 from pathlib import Path
 
 
+def parse_array_items(array_content):
+    """
+    Split array content by commas, but respect quoted strings.
+    For example: "item1", "item 2, with comma", "item3"
+    Returns: ["item1", "item 2, with comma", "item3"]
+    """
+    items = []
+    current_item = ""
+    in_quotes = False
+    quote_char = None
+    
+    for char in array_content:
+        if char in ('"', "'") and (not in_quotes or quote_char == char):
+            if in_quotes and quote_char == char:
+                in_quotes = False
+                quote_char = None
+            elif not in_quotes:
+                in_quotes = True
+                quote_char = char
+            current_item += char
+        elif char == "," and not in_quotes:
+            # End of item
+            item = current_item.strip().strip('"').strip("'")
+            if item:
+                items.append(item)
+            current_item = ""
+        else:
+            current_item += char
+    
+    # Don't forget the last item
+    item = current_item.strip().strip('"').strip("'")
+    if item:
+        items.append(item)
+    
+    return items
+
+
 def parse_toml_with_comments(filepath):
     """
     Parse a TOML file with comments and generate a Markdown documentation string.
@@ -29,10 +66,10 @@ This page documents the available options of `pihole-FTL`. They are typically ma
 
 Using the web interface, the API or the CLI is preferred as they can do error checking for you, trying to prevent any incompatible options which could prevent FTL from starting on a severely broken configuration.
 
-To edit with the command line, use the format `key.name=value`, e.g:
+To edit with the command line, use the format `--config key.name value`, e.g:
 
 ```text
-sudo pihole-FTL --config dns.dnssec=true
+sudo pihole-FTL --config dns.dnssec true
 ```
 
 !!! note "Environment Variables"
@@ -93,6 +130,27 @@ sudo pihole-FTL --config dns.dnssec=true
                 value = value_lines[0]
 
             documentation.append(f"### `{key}`\n")
+
+            # Extract example value from comments for use in Docker examples
+            example_value = None
+            if comment_buffer:
+                # Look for "Example:" in the comment buffer
+                for i, line in enumerate(comment_buffer):
+                    if "Example:" in line:
+                        # Extract the value from "Example: [ ... ]" or similar
+                        # The backticks are added later, so look for the raw example
+                        match = re.search(r'Example:\s*(.+?)(?:\s*$)', line)
+                        if match:
+                            example_value = match.group(1).strip()
+                        
+                        # Check if this is a multi-line example (e.g., array that spans multiple lines)
+                        if example_value and example_value.startswith("[") and not example_value.endswith("]"):
+                            # Multi-line array example - collect remaining lines
+                            j = i + 1
+                            while j < len(comment_buffer) and not example_value.endswith("]"):
+                                example_value += "\n" + comment_buffer[j]
+                                j += 1
+                        break
 
             # Process the comments collected for this key
             if comment_buffer:
@@ -158,37 +216,63 @@ sudo pihole-FTL --config dns.dnssec=true
             full_key = ".".join(section_stack + [key])
             env_var = "FTLCONF_" + full_key.replace(".", "_")
 
+            # Determine which value to use for examples (prefer example over default)
+            example_display_value = example_value if example_value else value
+
             # TOML example tab
             documentation.append(f'=== "TOML"')
             documentation.append("    ```toml")
             documentation.append(f"    [{'.'.join(section_stack)}]")
             # Indent multi-line values for TOML block
-            if "\n" in value:
-                indented_value = "\n".join("    " + v for v in value.splitlines()).strip()
+            if "\n" in example_display_value:
+                indented_value = "\n".join("    " + v for v in example_display_value.splitlines()).strip()
                 documentation.append(f"      {key} = {indented_value}")
             else:
-                documentation.append(f"      {key} = {value}")
+                documentation.append(f"      {key} = {example_display_value}")
             documentation.append("    ```")
 
             # CLI example tab
             documentation.append(f'=== "CLI"')
             documentation.append("    ```shell")
-            if "\n" in value and value.strip().startswith("["):
-                # Flatten multi-line array to single line for CLI
-                array_str = "".join(value.split())
-                documentation.append(f"    sudo pihole-FTL --config {full_key}='{array_str}'")
+            if example_display_value.strip().startswith("["):
+                # This is an array - wrap the array in single quotes for CLI
+                if "\n" in example_display_value:
+                    # Flatten multi-line array to single line
+                    array_str = "".join(example_display_value.split())
+                else:
+                    array_str = example_display_value
+                documentation.append(f"    sudo pihole-FTL --config {full_key} '{array_str}'")
             else:
-                documentation.append(f"    sudo pihole-FTL --config {full_key}={value}")
+                documentation.append(f"    sudo pihole-FTL --config {full_key} {example_display_value}")
             documentation.append("    ```")
 
             # Environment variable example tab (for Docker Compose)
             documentation.append(f'=== "Environment (Docker Compose)"')
             documentation.append("    ```yaml")
             documentation.append("    environment:")
-            yaml_value = value.replace('"',"'")
-            if "\n" in yaml_value:
-                yaml_value = f"|\n        " + "\n      ".join(yaml_value.splitlines())
-            documentation.append(f"      {env_var}: {yaml_value}")
+            
+            # Convert TOML-style array to proper YAML format
+            if example_display_value.strip().startswith("["):
+                # This is an array - convert to YAML format with pipe syntax
+                # Extract content between [ and ]
+                array_content = example_display_value.strip()[1:-1].strip()
+                if array_content:
+                    # Format as YAML multiline string with pipe syntax
+                    # Use smart splitting that respects quoted strings
+                    items = parse_array_items(array_content)
+                    documentation.append(f"      {env_var}: |-")
+                    for item in items:
+                        documentation.append(f"        {item}")
+                else:
+                    # Empty array
+                    documentation.append(f"      {env_var}: []")
+            else:
+                # Not an array, handle normally
+                yaml_value = example_display_value.replace('"',"'")
+                if "\n" in yaml_value:
+                    yaml_value = f"|\n        " + "\n        ".join(yaml_value.splitlines())
+                documentation.append(f"      {env_var}: {yaml_value}")
+            
             documentation.append("    ```\n")
             comment_buffer = []
 

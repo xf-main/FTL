@@ -12,8 +12,9 @@
 
 // logging routines
 #include "log.h"
-
 #include "sqlite3.h"
+// int64_t
+#include <inttypes.h>
 
 // Database table "ftl"
 enum ftl_table_props {
@@ -52,7 +53,9 @@ int db_query_int_from_until_type(sqlite3 *db, const char* querystr, const double
 
 void SQLite3LogCallback(void *pArg, int iErrCode, const char *zMsg);
 bool db_set_counter(sqlite3 *db, const enum counters_table_props ID, const int value);
+bool db_update_disk_counter(sqlite3 *db, const enum counters_table_props ID, const int change);
 const char *get_sqlite3_version(void);
+int64_t get_row_count(const char *table_name, const bool memory);
 
 extern bool DBdeleteoldqueries;
 
@@ -88,5 +91,31 @@ extern const char *sqlite3ErrName(int rc);
 		return;\
 	}\
 }
+
+// Macro to time a database operation expression EXPR if debug.timing is
+// enabled.
+#define TIMED_DB_OP(EXPR) { \
+	if(!config.debug.timing.v.b) { EXPR; } \
+	else { \
+		struct timespec _timed_start, _timed_end; \
+		clock_gettime(CLOCK_MONOTONIC, &_timed_start); \
+		(EXPR); \
+		clock_gettime(CLOCK_MONOTONIC, &_timed_end); \
+		long _timed_elapsed = (_timed_end.tv_sec - _timed_start.tv_sec) * 10000 + (_timed_end.tv_nsec - _timed_start.tv_nsec) / 100000; \
+		log_debug(DEBUG_TIMING, "Database operation %s took %.1f ms", str(EXPR), 0.1*_timed_elapsed); \
+	}}
+
+// Macro to time a database operation expression EXPR that returns a value if
+// debug.timing is enabled.
+#define TIMED_DB_OP_RESULT(_result, EXPR) { \
+	if(!config.debug.timing.v.b) { _result = EXPR; } \
+	else { \
+		struct timespec _timed_start, _timed_end; \
+		clock_gettime(CLOCK_MONOTONIC, &_timed_start); \
+		 _result = (EXPR); \
+		clock_gettime(CLOCK_MONOTONIC, &_timed_end); \
+		long _timed_elapsed = (_timed_end.tv_sec - _timed_start.tv_sec) * 10000 + (_timed_end.tv_nsec - _timed_start.tv_nsec) / 100000; \
+		log_debug(DEBUG_TIMING, "Database operation %s took %.1f ms", str(EXPR), 0.1*_timed_elapsed); \
+	}}
 
 #endif //DATABASE_COMMON_H

@@ -272,7 +272,7 @@ static unsigned char message_blob_types[MAX_MESSAGE][5] =
 bool create_message_table(sqlite3 *db)
 {
 	// Start transaction
-	SQL_bool(db, "BEGIN TRANSACTION");
+	SQL_bool(db, "BEGIN");
 
 	// The blob fields can hold arbitrary data. Their type is specified through the type.
 	SQL_bool(db, "CREATE TABLE message ( id INTEGER PRIMARY KEY AUTOINCREMENT, "
@@ -293,16 +293,14 @@ bool create_message_table(sqlite3 *db)
 	}
 
 	// End transaction
-	SQL_bool(db, "COMMIT");
+	SQL_bool(db, "END");
 
 	return true;
 }
 
 // Flush message table
-bool flush_message_table(void)
+bool flush_message_table(sqlite3 *memdb)
 {
-	sqlite3 *memdb = get_memdb();
-
 	// Flush message table
 	SQL_bool(memdb, "DELETE FROM disk.message;");
 
@@ -397,8 +395,6 @@ static int _add_message(const enum message_type type,
 			type, message, sqlite3_errstr(rc));
 		goto end_of_add_message;
 	}
-	sqlite3_clear_bindings(stmt);
-	sqlite3_reset(stmt);
 	sqlite3_finalize(stmt);
 	stmt = NULL;
 
@@ -461,7 +457,6 @@ static int _add_message(const enum message_type type,
 		{
 			log_err("add_message(type=%u, message=%s) - Failed to bind argument %zu (type %u): %s",
 			        type, message, 3 + j, datatype, sqlite3_errstr(rc));
-			sqlite3_reset(stmt);
 			sqlite3_finalize(stmt);
 			checkFTLDBrc(rc);
 			va_end(ap);
@@ -485,8 +480,6 @@ end_of_add_message: // Close database connection
 	// Final database handling
 	if(stmt != NULL)
 	{
-		sqlite3_clear_bindings(stmt);
-		sqlite3_reset(stmt);
 		sqlite3_finalize(stmt);
 
 		// Get row ID of the newly added message
@@ -538,7 +531,6 @@ bool delete_message(cJSON *ids, int *deleted)
 		*deleted += sqlite3_changes(db);
 
 		sqlite3_reset(res);
-		sqlite3_clear_bindings(res);
 	}
 	sqlite3_finalize(res);
 
@@ -619,40 +611,18 @@ static void format_subnet_message(char *plain, const int sizeof_plain, char *htm
 
 static void format_hostname_message(char *plain, const int sizeof_plain, char *html, const int sizeof_html, const char *ip, const char *name, const int pos)
 {
-	char *namep = escape_json(name);
-	if(namep == NULL)
-	{
-		log_err("format_hostname_message(): Failed to JSON escape host name \"%s\" of client \"%s\"", name, ip);
-		return;
-	}
-
-	// Check if the position is within the string before proceeding
-	// This is a safety measure to prevent buffer overflows caused by
-	// malicious database records
-	if(pos > (int)strlen(name))
-	{
-		log_err("format_hostname_message(): Invalid position %i for host name \"%s\" of client \"%s\"", pos, namep, ip);
-		if(namep != NULL)
-			free(namep);
-		return;
-	}
-
 	// Format the plain text message (the JSON string is already escaped and
 	// contains "" around the string)
-	if(snprintf(plain, sizeof_plain, "Host name of client \"%s\" => %s contains (at least) one invalid character (hex %02x) at position %i",
-			ip, namep, (unsigned char)name[pos], pos) > sizeof_plain)
+	if(snprintf(plain, sizeof_plain, "Host name of client \"%s\" => %s contains (at least) one invalid character at position %i",
+			ip, name, pos) > sizeof_plain)
 		log_warn("format_hostname_message(): Buffer too small to hold plain message, warning truncated");
 
 	// Return early if HTML text is not required
 	if(sizeof_html < 1 || html == NULL)
-	{
-		if(namep != NULL)
-			free(namep);
 		return;
-	}
 
 	char *escaped_ip = escape_html(ip);
-	char *escaped_name = escape_html(namep);
+	char *escaped_name = escape_html(name);
 
 	// Return early if memory allocation failed
 	if(escaped_ip == NULL || escaped_name == NULL)
@@ -661,8 +631,6 @@ static void format_hostname_message(char *plain, const int sizeof_plain, char *h
 			free(escaped_ip);
 		if(escaped_name != NULL)
 			free(escaped_name);
-		if(namep != NULL)
-			free(namep);
 		return;
 	}
 
@@ -672,8 +640,6 @@ static void format_hostname_message(char *plain, const int sizeof_plain, char *h
 
 	free(escaped_ip);
 	free(escaped_name);
-	if(namep != NULL)
-		free(namep);
 }
 
 static void format_dnsmasq_config_message(char *plain, const int sizeof_plain, char *html, const int sizeof_html, const char *message)
@@ -1028,11 +994,18 @@ int count_messages(void)
 		return count;
 	}
 
-	// Get message
+	// Count messages
 	sqlite3_stmt* stmt = NULL;
-	const char *querystr = config.misc.hide_dnsmasq_warn.v.b ?
-			"SELECT COUNT(*) FROM message WHERE type != 'DNSMASQ_WARN'" :
-			"SELECT COUNT(*) FROM message";
+	const char *querystr;
+	if(config.misc.hide_dnsmasq_warn.v.b && config.misc.hide_connection_error.v.b)
+		querystr = "SELECT COUNT(*) FROM message WHERE type NOT IN ('DNSMASQ_WARN', 'CONNECTION_ERROR')";
+	else if(config.misc.hide_dnsmasq_warn.v.b)
+		querystr = "SELECT COUNT(*) FROM message WHERE type != 'DNSMASQ_WARN'";
+	else if(config.misc.hide_connection_error.v.b)
+		querystr = "SELECT COUNT(*) FROM message WHERE type != 'CONNECTION_ERROR'";
+	else
+		querystr = "SELECT COUNT(*) FROM message";
+
 	int rc = sqlite3_prepare_v2(db, querystr, -1, &stmt, NULL);
 	if( rc != SQLITE_OK ){
 		log_err("count_messages() - SQL error prepare SELECT: %s",
@@ -1052,7 +1025,8 @@ int count_messages(void)
 	count = sqlite3_column_int(stmt, 0);
 
 end_of_count_messages: // Close database connection
-	sqlite3_finalize(stmt);
+	if(stmt != NULL)
+		sqlite3_finalize(stmt);
 	dbclose(&db);
 
 	return count;
@@ -1342,7 +1316,8 @@ bool format_messages(cJSON *array)
 	}
 
 end_of_format_message: // Close database connection
-	sqlite3_finalize(stmt);
+	if(stmt != NULL)
+		sqlite3_finalize(stmt);
 	dbclose(&db);
 
 	return true;
@@ -1391,7 +1366,7 @@ void logg_subnet_warning(const char *ip, const int matching_count, const char *m
 	free(names);
 }
 
-void logg_hostname_warning(const char *ip, const char *name, const unsigned int pos)
+void log_hostname_warning(const char *ip, const char *name, const unsigned int pos)
 {
 	// Create message
 	char buf[2048] = { 0 };

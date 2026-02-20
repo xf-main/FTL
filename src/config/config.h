@@ -160,6 +160,7 @@ struct config {
 			struct conf_item size;
 			struct conf_item optimizer;
 			struct conf_item upstreamBlockedTTL;
+			struct conf_item rrtype;
 		} cache;
 		struct {
 			struct conf_item active;
@@ -240,6 +241,7 @@ struct config {
 		struct conf_item maxDBdays;
 		struct conf_item DBinterval;
 		struct conf_item useWAL;
+		struct conf_item forceDisk;
 		struct {
 			struct conf_item parseARPcache;
 			struct conf_item expire;
@@ -296,6 +298,7 @@ struct config {
 	struct {
 		struct conf_item pid;
 		struct conf_item database;
+		struct conf_item tmp_db;
 		struct conf_item gravity;
 		struct conf_item gravity_tmp;
 		struct conf_item macvendor;
@@ -318,6 +321,7 @@ struct config {
 		struct conf_item readOnly;
 		struct conf_item normalizeCPU;
 		struct conf_item hide_dnsmasq_warn;
+		struct conf_item hide_connection_error;
 		struct {
 			struct conf_item load;
 			struct conf_item shmem;
@@ -358,6 +362,7 @@ struct config {
 		struct conf_item reserved;
 		struct conf_item ntp;
 		struct conf_item netlink;
+		struct conf_item timing;
 		// all must be the last item in this struct
 		struct conf_item all;
 	} debug;

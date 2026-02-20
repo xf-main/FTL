@@ -286,6 +286,14 @@ components:
           type: integer
           description: DataTables-specific integer (echos input value)
           example: 1
+        earliest_timestamp:
+          type: number
+          description: Earliest timestamp of queries in in-memory database (Unix time)
+          example: 1581900000.0
+        earliest_timestamp_disk:
+          type: number
+          description: Earliest timestamp of queries in on-disk database (Unix time)
+          example: 1580000000.0
     suggestions:
       type: object
       properties:

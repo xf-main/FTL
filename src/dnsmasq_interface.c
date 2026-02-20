@@ -48,7 +48,7 @@
 #include "webserver/webserver.h"
 // type struct sqlite3_stmt_vec
 #include "vector.h"
-// query_to_database()
+// init_memory_database()
 #include "database/query-table.h"
 // reread_config()
 #include "config/config.h"
@@ -97,10 +97,10 @@ static struct {
 	char name[IFNAMSIZ];
 	union all_addr addr4;
 	union all_addr addr6;
-} next_iface = {false, false, "", {{ 0 }}, {{ 0 }}};
+} next_iface = {false, false, "", {}, {}};
 
 // Fork-private copy of the server data the most recent reply came from
-static union mysockaddr last_server = {{ 0 }};
+static union mysockaddr last_server = {};
 
 const char *flagnames[] = {"F_IMMORTAL ", "F_NAMEP ", "F_REVERSE ", "F_FORWARD ", "F_DHCP ", "F_NEG ", "F_HOSTS ", "F_IPV4 ", "F_IPV6 ", "F_BIGNAME ", "F_NXDOMAIN ", "F_CNAME ", "F_DNSKEY ", "F_CONFIG ", "F_DS ", "F_DNSSECOK ", "F_UPSTREAM ", "F_RRNAME ", "F_SERVER ", "F_QUERY ", "F_NOERR ", "F_AUTH ", "F_DNSSEC ", "F_KEYTAG ", "F_SECSTAT ", "F_NO_RR ", "F_IPSET ", "F_NOEXTRA ", "F_DOMAINSRV", "F_RCODE", "F_RR", "F_STALE" };
 
@@ -296,7 +296,7 @@ size_t _FTL_make_answer(struct dns_header *header, char *limit, const size_t len
 
 	// Check for regex redirecting
 	bool redirecting = false;
-	union all_addr redirect_addr4 = {{ 0 }}, redirect_addr6 = {{ 0 }};
+	union all_addr redirect_addr4 = {}, redirect_addr6 = {};
 	if(last_regex_idx > -1)
 	{
 		redirecting = regex_get_redirect(last_regex_idx, &redirect_addr4.addr4, &redirect_addr6.addr6);
@@ -463,21 +463,33 @@ size_t _FTL_make_answer(struct dns_header *header, char *limit, const size_t len
 	// Add A answer record if requested
 	if(flags & F_IPV4)
 	{
-		union all_addr addr = {{ 0 }};
+		union all_addr addr = {};
 
 		// Overwrite with IP address if requested
 		if(redirecting)
+		{
+			log_debug(DEBUG_QUERIES, "Using regex redirected A address");
 			memcpy(&addr, &redirect_addr4, sizeof(addr));
+		}
 		else if(config.dns.blocking.mode.v.blocking_mode == MODE_IP ||
 		        config.dns.blocking.mode.v.blocking_mode == MODE_IP_NODATA_AAAA ||
 		        forced_ip)
 		{
 			if(hostn && config.dns.reply.host.force4.v.b)
+			{
+				log_debug(DEBUG_QUERIES, "Using dns.reply.host.force4");
 				memcpy(&addr, &config.dns.reply.host.v4.v.in_addr, sizeof(addr.addr4));
+			}
 			else if(!hostn && config.dns.reply.blocking.force4.v.b)
+			{
+				log_debug(DEBUG_QUERIES, "Using dns.reply.blocking.force4");
 				memcpy(&addr, &config.dns.reply.blocking.v4.v.in_addr, sizeof(addr.addr4));
+			}
 			else
+			{
+				log_debug(DEBUG_QUERIES, "Using next_iface A address");
 				memcpy(&addr, &next_iface.addr4, sizeof(addr.addr4));
+			}
 		}
 
 		// Debug logging
@@ -499,20 +511,32 @@ size_t _FTL_make_answer(struct dns_header *header, char *limit, const size_t len
 	// Add AAAA answer record if requested
 	if(flags & F_IPV6)
 	{
-		union all_addr addr = {{ 0 }};
+		union all_addr addr = {};
 
 		// Overwrite with IP address if requested
 		if(redirecting)
+		{
+			log_debug(DEBUG_QUERIES, "Using regex redirected AAAA address");
 			memcpy(&addr, &redirect_addr6, sizeof(addr));
+		}
 		else if(config.dns.blocking.mode.v.blocking_mode == MODE_IP ||
 		        forced_ip)
 		{
 			if(hostn && config.dns.reply.host.force6.v.b)
+			{
+				log_debug(DEBUG_QUERIES, "Using dns.reply.host.force6");
 				memcpy(&addr, &config.dns.reply.host.v6.v.in6_addr, sizeof(addr.addr6));
+			}
 			else if(!hostn && config.dns.reply.blocking.force6.v.b)
+			{
+				log_debug(DEBUG_QUERIES, "Using dns.reply.blocking.force6");
 				memcpy(&addr, &config.dns.reply.blocking.v6.v.in6_addr, sizeof(addr.addr6));
+			}
 			else
+			{
+				log_debug(DEBUG_QUERIES, "Using next_iface AAAA address");
 				memcpy(&addr, &next_iface.addr6, sizeof(addr.addr6));
+			}
 		}
 
 		// Debug logging
@@ -537,7 +561,7 @@ size_t _FTL_make_answer(struct dns_header *header, char *limit, const size_t len
 		if(flags == 0)
 		{
 			// REFUSED
-			union all_addr addr = {{ 0 }};
+			union all_addr addr = {};
 			addr.log.rcode = REFUSED;
 			addr.log.ede = EDE_BLOCKED;
 			log_query(F_RCODE | F_HOSTS, name, &addr, (char*)blockingreason, 0);
@@ -863,8 +887,10 @@ bool _FTL_new_query(const unsigned int flags, const char *name,
 	query_set_status_init(query, QUERY_UNKNOWN);
 	query->domainID = domainID;
 	query->clientID = clientID;
-	// Initialize database field, will be set when the query is stored in the long-term DB
-	query->flags.database.stored = false;
+	// Initialize database fields
+	// This query is new and not yet known to the database
+	query->db = -1;
+	query->flags.database.imported = false;
 	query->flags.database.changed = true;
 	query->flags.complete = false;
 	query->response = querytimestamp;
@@ -895,8 +921,6 @@ bool _FTL_new_query(const unsigned int flags, const char *name,
 	// (domain,client,type) tuple was already seen before
 	query->cacheID = findCacheID(domainID, clientID, querytype, true);
 
-	// This query is new and not yet known to the database
-	query->db = -1;
 
 	// Increase DNS queries counter
 	counters->queries++;
@@ -1190,7 +1214,7 @@ static void check_pihole_PTR(char *domain)
 	}
 
 	// Convert PTR request into numeric form
-	union all_addr addr = {{ 0 }};
+	union all_addr addr = {};
 	const int flags = in_arpa_name_2_addr(domain, &addr);
 
 	// Check if this is a valid in-addr.arpa (IPv4) or ip6.[int|arpa] (IPv6)
@@ -1695,11 +1719,11 @@ static bool FTL_check_blocking(const unsigned int queryID, const unsigned int do
 	const char *blockedDomain = domain_lower;
 
 	// Check exact whitelist for match
-	query->flags.allowed = in_allowlist(domain_lower, dns_cache, client) == FOUND;
+	TIMED_DB_OP_RESULT(query->flags.allowed, in_allowlist(domain_lower, dns_cache, client) == FOUND);
 
 	// If not found: Check regex whitelist for match
 	if(!query->flags.allowed)
-		query->flags.allowed = in_regex(domain_lower, dns_cache, client->id, REGEX_ALLOW);
+		TIMED_DB_OP_RESULT(query->flags.allowed, in_regex(domain_lower, dns_cache, client->id, REGEX_ALLOW));
 
 	// Check if this is a special domain
 	if(!query->flags.allowed && special_domain(query, domain_lower))
@@ -1721,7 +1745,8 @@ static bool FTL_check_blocking(const unsigned int queryID, const unsigned int do
 	// Check blacklist (exact + regex) and gravity for queried domain
 	unsigned char new_status = QUERY_UNKNOWN;
 	bool db_okay = true;
-	bool blockDomain = check_domain_blocked(domain_lower, client, query, dns_cache, &new_status, &db_okay);
+	bool blockDomain;
+	TIMED_DB_OP_RESULT(blockDomain, check_domain_blocked(domain_lower, client, query, dns_cache, &new_status, &db_okay));
 
 	// Check blacklist (exact + regex) and gravity for _esni.domain if enabled
 	// (defaulting to true)
@@ -1729,7 +1754,7 @@ static bool FTL_check_blocking(const unsigned int queryID, const unsigned int do
 	   !query->flags.allowed && blockDomain == NOT_FOUND &&
 	   strlen(domain_lower) > 6 && strncasecmp(domain_lower, "_esni.", 6u) == 0)
 	{
-		blockDomain = check_domain_blocked(domain_lower + 6u, client, query, dns_cache, &new_status, &db_okay);
+		TIMED_DB_OP_RESULT(blockDomain, check_domain_blocked(domain_lower + 6u, client, query, dns_cache, &new_status, &db_okay));
 
 		// Update DNS cache status
 		cacheStatus = dns_cache->blocking_status;
@@ -3280,18 +3305,11 @@ void FTL_fork_and_bind_sockets(struct passwd *ent_pw, bool dnsmasq_start)
 	if(!init_memory_database())
 		log_crit("Cannot initialize in-memory database.");
 
-	// Flush messages stored in the long-term database
-	if(!FTLDBerror())
-		flush_message_table();
-
 	// Verify checksum of this binary early on to ensure that the binary is
 	// not corrupted and that the binary is not tampered with. We can only
 	// do this here as we need the database to be properly initialized
 	// in case we need to store the verification result
 	verify_FTL(false);
-
-	// Initialize in-memory database starting index
-	init_disk_db_idx();
 
 	// Handle real-time signals in this process (and its children)
 	// Helper processes are already split from the main instance
@@ -3405,9 +3423,6 @@ void FTL_fork_and_bind_sockets(struct passwd *ent_pw, bool dnsmasq_start)
 		else
 			log_info("Failed to obtain information about FTL user");
 	}
-
-	// Initialize FTL HTTP server
-	http_init();
 
 	forked = true;
 }
@@ -3637,11 +3652,11 @@ void FTL_TCP_worker_created(const int confd)
 	{
 		// Get peer IP address (client)
 		char peer_ip[ADDRSTRLEN] = { 0 };
-		union mysockaddr peer_sockaddr = {{ 0 }};
+		union mysockaddr peer_sockaddr = {};
 		socklen_t peer_len = sizeof(union mysockaddr);
 		if (getpeername(confd, (struct sockaddr *)&peer_sockaddr, &peer_len) != -1)
 		{
-			union all_addr peer_addr = {{ 0 }};
+			union all_addr peer_addr = {};
 			if (peer_sockaddr.sa.sa_family == AF_INET6)
 				peer_addr.addr6 = peer_sockaddr.in6.sin6_addr;
 			else
@@ -3651,11 +3666,11 @@ void FTL_TCP_worker_created(const int confd)
 
 		// Get local IP address (interface)
 		char local_ip[ADDRSTRLEN] = { 0 };
-		union mysockaddr iface_sockaddr = {{ 0 }};
+		union mysockaddr iface_sockaddr = {};
 		socklen_t iface_len = sizeof(union mysockaddr);
 		if(getsockname(confd, (struct sockaddr *)&iface_sockaddr, &iface_len) != -1)
 		{
-			union all_addr iface_addr = {{ 0 }};
+			union all_addr iface_addr = {};
 			if (iface_sockaddr.sa.sa_family == AF_INET6)
 				iface_addr.addr6 = iface_sockaddr.in6.sin6_addr;
 			else

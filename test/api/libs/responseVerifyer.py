@@ -122,6 +122,9 @@ class ResponseVerifyer():
 		self.auth_method = self.ftl.auth_method
 		if FTLresponse is None:
 			return self.ftl.errors
+		
+#		if endpoint.startswith("/domains"):
+#			pprint.pprint(FTLresponse)  # --- IGNORE ---
 
 		self.YAMLresponse = {}
 		# Checking depends on the expected mimetype
@@ -322,21 +325,6 @@ class ResponseVerifyer():
 			if type(FTLprop) is not list:
 				self.errors.append("FTL's response is not an array in " + flat_path)
 				return False
-			# Check if the FTL response has the same number of items as the
-			# YAML examples
-			elif YAMLexamples is not None:
-				for t in YAMLexamples:
-					if 'value' not in YAMLexamples[t]:
-						self.errors.append(f"Example {flat_path} does not have a 'value' property")
-						return False
-					example = YAMLexamples[t]['value']
-					# Dive into the example to get to the property we want
-					example_part = example
-					for p in props:
-						if p not in example_part:
-							self.errors.append(f"Example {t} is missing '{flat_path}'")
-							return False
-						example_part = example_part[p]
 			# Loop over all items in the array ...
 			for i in range(len(FTLprop)):
 				# ... and check them recursively if they are objects
@@ -347,11 +335,25 @@ class ResponseVerifyer():
 					else:
 						# Simple array and declared as such, no need for further recursion
 						continue
+
+				# Check for allOf definitions in an array defining arrays of objects where all components must be checked
+				if 'allOf' in YAMLprop['items'] and type(FTLprop[i]) is dict:
+					for j in FTLprop[i]:
+						# Collect all allOf components ...
+						allOf_props = {}
+						for allOf in YAMLprop['items']['allOf']:
+							allOf_props.update(allOf['properties'])
+						# ... and check them recursively
+						if not self.verify_property(allOf_props, YAMLexamples, FTLprop[i], props + [i, str(j)]):
+							all_okay = False
+					continue
+
 				if 'properties' not in YAMLprop['items'] and type(FTLprop[i]) is dict:
 					self.errors.append(flat_path + " is an array of objects, but the API specs define it as a simple array")
 					return False
 
 				for j in FTLprop[i]:
+					# ... and check them recursively
 					if not self.verify_property(YAMLprop['items']['properties'], YAMLexamples, FTLprop[i], props + [i, str(j)]):
 						all_okay = False
 

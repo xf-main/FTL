@@ -25,6 +25,8 @@
 #include "signals.h"
 // nlneigh(), nllinks()
 #include "tools/netlink.h"
+// DHCPLEASESFILE
+#include "config/dnsmasq_config.h"
 
 #define MAXVENDORLEN 128
 static bool getMACVendor(const char *hwaddr, char vendor[MAXVENDORLEN]);
@@ -37,7 +39,7 @@ bool create_network_table(sqlite3 *db)
 		return false;
 
 	// Start transaction
-	SQL_bool(db, "BEGIN TRANSACTION");
+	SQL_bool(db, "BEGIN");
 
 	// Create network table in the database
 	SQL_bool(db, "CREATE TABLE network ( id INTEGER PRIMARY KEY NOT NULL, " \
@@ -58,7 +60,7 @@ bool create_network_table(sqlite3 *db)
 	}
 
 	// End transaction
-	SQL_bool(db, "COMMIT");
+	SQL_bool(db, "END");
 
 	return true;
 }
@@ -74,7 +76,7 @@ bool create_network_addresses_table(sqlite3 *db)
 	SQL_bool(db, "PRAGMA foreign_keys=OFF");
 
 	// Begin new transaction
-	SQL_bool(db, "BEGIN TRANSACTION");
+	SQL_bool(db, "BEGIN");
 
 	// Create network_addresses table in the database
 	SQL_bool(db, "CREATE TABLE network_addresses ( network_id INTEGER NOT NULL, "\
@@ -121,7 +123,7 @@ bool create_network_addresses_table(sqlite3 *db)
 	}
 
 	// Finish transaction
-	SQL_bool(db, "COMMIT");
+	SQL_bool(db, "END");
 
 	// Re-enable foreign key enforcement
 	SQL_bool(db, "PRAGMA foreign_keys=ON");
@@ -140,7 +142,7 @@ bool create_network_addresses_with_names_table(sqlite3 *db)
 	SQL_bool(db, "PRAGMA foreign_keys=OFF");
 
 	// Begin new transaction
-	SQL_bool(db, "BEGIN TRANSACTION");
+	SQL_bool(db, "BEGIN");
 
 	// Step 1: Create network_addresses table in the database
 	SQL_bool(db, "CREATE TABLE network_addresses_bck ( network_id INTEGER NOT NULL, "
@@ -197,7 +199,7 @@ bool create_network_addresses_with_names_table(sqlite3 *db)
 	}
 
 	// Finish transaction
-	SQL_bool(db, "COMMIT");
+	SQL_bool(db, "END");
 
 	// Re-enable foreign key enforcement
 	SQL_bool(db, "PRAGMA foreign_keys=ON");
@@ -371,8 +373,8 @@ update_netDB_name_end:
 		checkFTLDBrc(rc);
 
 	// Finalize statement
-	sqlite3_reset(query_stmt);
-	sqlite3_finalize(query_stmt);
+	if(query_stmt != NULL)
+		sqlite3_finalize(query_stmt);
 
 	return success;
 }
@@ -516,8 +518,8 @@ add_netDB_network_address_end:
 		checkFTLDBrc(rc);
 
 	// Finalize statement
-	sqlite3_reset(query_stmt);
-	sqlite3_finalize(query_stmt);
+	if(query_stmt != NULL)
+		sqlite3_finalize(query_stmt);
 
 	return success;
 }
@@ -619,8 +621,8 @@ insert_netDB_device_end:
 		checkFTLDBrc(rc);
 
 	// Finalize statement
-	sqlite3_reset(query_stmt);
-	sqlite3_finalize(query_stmt);
+	if(query_stmt != NULL)
+		sqlite3_finalize(query_stmt);
 
 	return success;
 }
@@ -701,8 +703,8 @@ unmock_netDB_device_end:
 		checkFTLDBrc(rc);
 
 	// Finalize statement
-	sqlite3_reset(query_stmt);
-	sqlite3_finalize(query_stmt);
+	if(query_stmt != NULL)
+		sqlite3_finalize(query_stmt);
 
 	return success;
 }
@@ -776,8 +778,8 @@ update_netDB_interface_end:
 		checkFTLDBrc(rc);
 
 	// Finalize statement
-	sqlite3_reset(query_stmt);
-	sqlite3_finalize(query_stmt);
+	if(query_stmt != NULL)
+		sqlite3_finalize(query_stmt);
 
 	return true;
 }
@@ -857,7 +859,7 @@ static bool add_FTL_clients_to_network_table(sqlite3 *db, const enum arp_status 
 			if(dbID >= 0)
 				log_debug(DEBUG_ARP, "Network table: Client with MAC %s is network ID %i", hwaddr, dbID);
 		}
-		else
+		if (dbID == DB_NODATA)
 		{
 			//
 			// Variant 2: Try to find a device using the same IP address within the last 24 hours
@@ -875,25 +877,95 @@ static bool add_FTL_clients_to_network_table(sqlite3 *db, const enum arp_status 
 				log_debug(DEBUG_ARP, "Network table: Client with IP %s has no MAC info but was recently be seen for network ID %i",
 				          ipaddr, dbID);
 			}
+		}
 
-			//
-			// Variant 3: Try to find a device with mock IP address
-			// Only try this when there is no EDNS(0) MAC address available
-			//
-			if(dbID < 0)
+		//
+		// Variant 3: Try to find MAC address from DHCP leases file
+		// if DHCP server is enabled
+		//
+		bool dhcp_lease = false;
+		if (dbID == DB_NODATA && config.dhcp.active.v.b)
+		{
+			log_debug(DEBUG_ARP, "Network table: DHCP server enabled, checking leases for IP %s", ipaddr);
+			FILE *fp = fopen(DHCPLEASESFILE, "r");
+			if(fp != NULL)
 			{
-				unlock_shm();
-				dbID = find_device_by_mock_hwaddr(db, ipaddr);
-				lock_shm();
+				char *line = NULL;
+				size_t line_len = 0;
+				ssize_t read;
 
-				// Reacquire client pointer (if may have changed when unlocking above)
-				client = getClient(clientID, true);
-
-				if(dbID > DB_NODATA)
+				while((read = getline(&line, &line_len, fp)) != -1 && !dhcp_lease)
 				{
-					log_debug(DEBUG_ARP, "Network table: Client with IP %s has no MAC info but is known as mock-hwaddr client with network ID %i",
-					          ipaddr, dbID);
+					// Skip empty lines
+					if(read == 0)
+						continue;
+					// Skip duid line
+					if(strncmp(line, "duid", 4) == 0)
+						continue;
+
+					// Parse line
+					unsigned long expires = 0;
+					char lease_hwaddr[48] = { 0 };
+					char lease_ip[INET6_ADDRSTRLEN] = { 0 };
+					char lease_name[65] = { 0 };
+					const int ret = sscanf(line, "%lu %47s %45s %64s",
+			                       &expires, lease_hwaddr, lease_ip, lease_name);
+					// Skip invalid lines
+					if(ret != 4)
+						continue;
+
+					// Check if this lease matches our client's IP address
+					if(strcmp(lease_ip, ipaddr) == 0)
+					{
+						// Found matching lease, use its MAC address
+						strncpy(hwaddr, lease_hwaddr, sizeof(hwaddr) - 1);
+						hwaddr[sizeof(hwaddr) - 1] = '\0';
+
+						// Check if lease has a hostname recorded
+						if(strcmp(lease_name, "*") != 0) {
+							strncpy(hostname, lease_name, sizeof(hostname) -1);
+						hostname[sizeof(hostname) -1] = '\0';}
+
+						log_debug(DEBUG_ARP, "Network table: Found MAC %s for IP %s in DHCP leases file",
+						          hwaddr, ipaddr);
+
+						unlock_shm();
+						dbID = find_device_by_hwaddr(db, hwaddr);
+						lock_shm();
+
+						// Reacquire client pointer (it may have changed when unlocking above)
+						client = getClient(clientID, true);
+
+						if(dbID >= 0)
+							log_debug(DEBUG_ARP, "Network table: Client with MAC %s is network ID %i", hwaddr, dbID);
+						dhcp_lease = true;
+					}
 				}
+				free(line);
+				fclose(fp);
+			}
+			else
+			log_debug(DEBUG_ARP, "Network table: Unable to open dhcp.leases");
+		}
+
+		//
+		// Variant 4: Try to find a device with mock IP address
+		// Only try this when there is no EDNS(0) MAC address available
+		// nor a corresponding DHCP lease
+		//
+		if (dbID < 0 && dhcp_lease == false)
+		{
+			unlock_shm();
+			dbID = find_device_by_mock_hwaddr(db, ipaddr);
+			lock_shm();
+
+			// Reacquire client pointer (if may have changed when unlocking above)
+			client = getClient(clientID, true);
+
+			if(dbID > DB_NODATA)
+			{
+				log_debug(DEBUG_ARP, "Network table: Client with IP %s has no MAC info but is known as mock-hwaddr client with network ID %i",
+				          ipaddr, dbID);
 			}
 
 			// Create mock hardware address in the style of "ip-<IP address>", like "ip-127.0.0.1"
@@ -912,9 +984,10 @@ static bool add_FTL_clients_to_network_table(sqlite3 *db, const enum arp_status 
 		else if(dbID == DB_NODATA)
 		{
 			char macVendor[MAXVENDORLEN] = { 0 };
-			if(client->hwlen == 6)
+			if(client->hwlen == 6 || dhcp_lease)
 			{
 				// Normal client, MAC was likely obtained from EDNS(0) data
+				// or from dhcp lease
 				unlock_shm();
 				getMACVendor(hwaddr, macVendor);
 				lock_shm();
@@ -1201,7 +1274,7 @@ void parse_neighbor_cache(sqlite3 *db)
 	// Start transaction to speed up database queries, to avoid that the
 	// database is locked by other processes and to allow for a rollback in
 	// case of an error
-	if(dbquery(db, "BEGIN TRANSACTION") != SQLITE_OK)
+	if(dbquery(db, "BEGIN") != SQLITE_OK)
 	{
 		// dbquery() above already logs the reason for why the query failed
 		log_warn("Starting first transaction failed during ARP parsing");
@@ -1524,7 +1597,7 @@ void parse_neighbor_cache(sqlite3 *db)
 
 	// Actually update the database
 	log_debug(DEBUG_ARP, "Network table: Committing changes to database");
-	if((rc = dbquery(db, "END TRANSACTION")) != SQLITE_OK)
+	if((rc = dbquery(db, "END")) != SQLITE_OK)
 	{
 		if( rc == SQLITE_BUSY )
 			log_warn("Storing devices in network table failed: %s", sqlite3_errstr(rc));
@@ -1563,7 +1636,7 @@ bool unify_hwaddr(sqlite3 *db)
 	                        "AND cnt > 1;";
 
 	// Start transaction
-	SQL_bool(db, "BEGIN TRANSACTION");
+	SQL_bool(db, "BEGIN");
 
 	// Perform SQL query
 	bool success = false;
@@ -1620,14 +1693,12 @@ unify_hwaddr_end:
 	if(!success)
 		checkFTLDBrc(rc);
 
-	// Reset statement
-	sqlite3_reset(stmt);
-
 	// Finalize statement
-	sqlite3_finalize(stmt);
+	if(stmt != NULL)
+		sqlite3_finalize(stmt);
 
 	// End transaction
-	SQL_bool(db, "COMMIT");
+	SQL_bool(db, "END");
 
 	return success;
 }
@@ -1728,8 +1799,8 @@ getMACVendor_end:
 		checkFTLDBrc(rc);
 
 	// Finalize statement and close database
-	sqlite3_reset(stmt);
-	sqlite3_finalize(stmt);
+	if(stmt != NULL)
+		sqlite3_finalize(stmt);
 	sqlite3_close(macvendor_db);
 
 	log_debug(DEBUG_ARP, "MAC Vendor lookup for %s returned \"%s\"", hwaddr, vendor);
@@ -1759,7 +1830,7 @@ bool updateMACVendorRecords(sqlite3 *db)
 	}
 
 	bool success = false;
-	sqlite3_stmt *stmt = NULL;
+	sqlite3_stmt *stmt = NULL, *stmt2 = NULL;
 	const char *selectstr = "SELECT id,hwaddr FROM network;";
 	int rc = sqlite3_prepare_v2(db, selectstr, -1, &stmt, NULL);
 	if(rc != SQLITE_OK)
@@ -1777,7 +1848,6 @@ bool updateMACVendorRecords(sqlite3 *db)
 		getMACVendor((char*)sqlite3_column_text(stmt, 1), vendor);
 
 		// Prepare statement
-		sqlite3_stmt *stmt2 = NULL;
 		const char *updatestr = "UPDATE network SET macVendor = ?1 WHERE id = ?2";
 		rc = sqlite3_prepare_v2(db, updatestr, -1, &stmt2, NULL);
 		if(rc != SQLITE_OK)
@@ -1805,6 +1875,10 @@ bool updateMACVendorRecords(sqlite3 *db)
 		if(rc != SQLITE_DONE)
 			goto updateMACVendorRecords_end;
 
+		// Finalize statement2 for next iteration
+		sqlite3_finalize(stmt2);
+		stmt2 = NULL;
+
 	}
 	if(rc != SQLITE_DONE)
 	{
@@ -1819,11 +1893,11 @@ updateMACVendorRecords_end:
 	if(!success)
 		checkFTLDBrc(rc);
 
-	// Reset statement
-	sqlite3_reset(stmt);
-
-	// Finalize statement
-	sqlite3_finalize(stmt);
+	// Finalize statement2
+	if(stmt != NULL)
+		sqlite3_finalize(stmt);
+	if(stmt2 != NULL)
+	sqlite3_finalize(stmt2);
 
 	return success;
 }
@@ -1898,8 +1972,8 @@ getMACfromIP_end:
 		checkFTLDBrc(rc);
 
 	// Finalize statement and close database handle
-	sqlite3_reset(stmt);
-	sqlite3_finalize(stmt);
+	if(stmt != NULL)
+		sqlite3_finalize(stmt);
 
 	if(db_opened)
 		dbclose(&db);
@@ -1984,8 +2058,8 @@ getAliasclientIDfromIP_end:
 		checkFTLDBrc(rc);
 
 	// Finalize statement and close database handle
-	sqlite3_reset(stmt);
-	sqlite3_finalize(stmt);
+	if(stmt != NULL)
+		sqlite3_finalize(stmt);
 
 	if(db_opened)
 		dbclose(&db);
@@ -2065,8 +2139,8 @@ bool getNameFromIP(sqlite3 *db, char hostn[MAXDOMAINLEN], const char *ipaddr)
 	}
 
 	// Finalize statement
-	sqlite3_reset(stmt);
-	sqlite3_finalize(stmt);
+	if(stmt != NULL)
+		sqlite3_finalize(stmt);
 
 	// Return here if we found the name
 	if(got_name)
@@ -2139,8 +2213,8 @@ getNameFromIP_end:
 		checkFTLDBrc(rc);
 
 	// Finalize statement and close database handle (if opened)
-	sqlite3_reset(stmt);
-	sqlite3_finalize(stmt);
+	if(stmt != NULL)
+		sqlite3_finalize(stmt);
 
 	if(db_opened)
 		dbclose(&db);
@@ -2222,8 +2296,8 @@ getNameFromMAC_end:
 		checkFTLDBrc(rc);
 
 	// Finalize statement and close database handle
-	sqlite3_reset(stmt);
-	sqlite3_finalize(stmt);
+	if(stmt != NULL)
+		sqlite3_finalize(stmt);
 
 	dbclose(&db);
 	return got_name;
@@ -2304,8 +2378,8 @@ getIfaceFromIP_end:
 		checkFTLDBrc(rc);
 
 	// Finalize statement and close database handle
-	sqlite3_reset(stmt);
-	sqlite3_finalize(stmt);
+	if(stmt != NULL)
+		sqlite3_finalize(stmt);
 
 	if(db_opened)
 		dbclose(&db);
@@ -2511,8 +2585,8 @@ bool networkTable_deleteDevice(sqlite3 *db, const int id, int *deleted, const ch
 networkTable_deleteDevice_end:
 
 	// Finalize statement
-	sqlite3_reset(stmt);
-	sqlite3_finalize(stmt);
+	if(stmt != NULL)
+		sqlite3_finalize(stmt);
 
 	return success;
 }

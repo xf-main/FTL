@@ -488,9 +488,7 @@ bool __attribute__((nonnull(1,3))) write_dnsmasq_config(struct config *conf, boo
 	fputs("\n", pihole_conf);
 
 	// Add upstream DNS servers for reverse lookups
-	bool domain_revServer = false;
-	bool domain_homearpa = false;
-	bool domain_internal = false;
+	bool revServer_domain = false, revServer_homearpa = false, revServer_internal = false;
 	const unsigned int revServers = cJSON_GetArraySize(conf->dns.revServers.v.json);
 	for(unsigned int i = 0; i < revServers; i++)
 	{
@@ -540,15 +538,15 @@ bool __attribute__((nonnull(1,3))) write_dnsmasq_config(struct config *conf, boo
 			// Check if the configured domain is the same as the main domain
 			if(strlen(config.dns.domain.name.v.s) > 0 &&
 			   strcasecmp(domain, config.dns.domain.name.v.s) == 0)
-				domain_revServer = true;
+				revServer_domain = true;
 
-			// Flag if configured a server for queries for home.arpa domains
+			// Flag if configured a server for queries for "home.arpa" TLD
 			if(strcmp(domain, "home.arpa") == 0)
-				domain_homearpa = true;
+				revServer_homearpa = true;
 
-			// Flag if configured a server for queries for .internal domains
+			// Flag if configured a server for queries for "internal" TLD
 			if(strcmp(domain, "internal") == 0)
-				domain_internal = true;
+				revServer_internal = true;
 		}
 
 		// Forward unqualified names to the target only when the "never forward
@@ -571,17 +569,55 @@ bool __attribute__((nonnull(1,3))) write_dnsmasq_config(struct config *conf, boo
 		fputs("local=//\n\n", pihole_conf);
 	}
 
-	// Ensure that home.arpa domains (RFC 8375) are not sent upstream, unless configured by
-	// user as local domain, with server setting applied above
-	if (!domain_homearpa)
+	// Ensure that home.arpa domains (RFC 8375) are not forwarded to
+	// upstream servers by default. However, we skip adding the protection
+	// when the user has explicitly configured an exception. The exceptions
+	// are:
+	//  - a reverse server has been configured for the "home.arpa" TLD, OR
+	//  - the configured DNS domain equals "home.arpa" and that domain is
+	//    explicitly marked non-local.
+	const bool domain_homearpa = strlen(conf->dns.domain.name.v.s) > 0 &&
+	                             strcasecmp(conf->dns.domain.name.v.s, "home.arpa") == 0;
+	if(revServer_homearpa)
 	{
-		fputs("# Do not forward home.arpa domains to upstream servers\n",pihole_conf);
+		fputs("# A reverse server is configured for \"home.arpa\".\n", pihole_conf);
+		fputs("# All queries for this domain will be forwarded to this\n", pihole_conf);
+		fputs("# upstream server\n\n", pihole_conf);
+	}
+	else if(domain_homearpa && !config.dns.domain.local.v.b)
+	{
+		fputs("# The configured DNS domain is \"home.arpa\" and is explicitly\n", pihole_conf);
+		fputs("# marked non-local. Pi-hole will be forwarding queries for this\n", pihole_conf);
+		fputs("# domain to upstream servers.\n\n", pihole_conf);
+	}
+	else
+	{
+		fputs("# Do not forward .home.arpa domains to upstream servers\n",pihole_conf);
 		fputs("local=/home.arpa/\n\n",pihole_conf);
 	}
 
-	// Ensure that .internal domains (Internet-Draft draft-davies-internal-tld-03) are not
-	// sent upstream, unless configured by user as local domain, with server setting applied above
-	if (!domain_internal)
+	// Ensure that internal domains (Internet-Draft
+	// draft-davies-internal-tld-05) are not forwarded to upstream servers
+	// by default. However, we skip adding the protection when the user has
+	// explicitly configured an exception. The exceptions are:
+	//  - a reverse server has been configured for the "internal" TLD, OR
+	//  - the configured DNS domain equals "internal" and that domain is
+	//    explicitly marked non-local.
+	const bool domain_internal = strlen(conf->dns.domain.name.v.s) > 0 &&
+	                             strcasecmp(conf->dns.domain.name.v.s, "internal") == 0;
+	if(revServer_internal)
+	{
+		fputs("# A reverse server is configured for \"internal\".\n", pihole_conf);
+		fputs("# All queries for this domain will be forwarded to this\n", pihole_conf);
+		fputs("# upstream server\n\n", pihole_conf);
+	}
+	else if(domain_internal && !config.dns.domain.local.v.b)
+	{
+		fputs("# The configured DNS domain is \"internal\" and is explicitly\n", pihole_conf);
+		fputs("# marked non-local. Pi-hole will be forwarding queries for this\n", pihole_conf);
+		fputs("# domain to upstream servers.\n\n", pihole_conf);
+	}
+	else
 	{
 		fputs("# Do not forward .internal domains to upstream servers\n",pihole_conf);
 		fputs("local=/internal/\n\n",pihole_conf);
@@ -592,14 +628,14 @@ bool __attribute__((nonnull(1,3))) write_dnsmasq_config(struct config *conf, boo
 	if(strlen(conf->dns.domain.name.v.s) > 0)
 	{
 		fputs("# DNS domain for both the DNS and DHCP server\n", pihole_conf);
-		if(domain_revServer || !config.dns.domain.local.v.b)
+		if(revServer_domain || !config.dns.domain.local.v.b)
 		{
-			if(domain_revServer)
+			if(revServer_domain)
 			{
 				fputs("# This DNS domain is also used for reverse lookups\n", pihole_conf);
 				fputs("# It is forwarded to the upstream servers configured above\n", pihole_conf);
 			}
-			else if(!config.dns.domain.local.v.b)
+			else // !config.dns.domain.local.v.b
 			{
 				fputs("# This domain is explicitly configured to *not* be local. Ensure\n", pihole_conf);
 				fputs("# that you have configured at least one upstream server for this\n", pihole_conf);
@@ -775,9 +811,9 @@ bool __attribute__((nonnull(1,3))) write_dnsmasq_config(struct config *conf, boo
 		fputs("\n", pihole_conf);
 	}
 
-	// Add option for caching all DNS records
+	// Add option for which DNS records types to cache
 	fputs("# Cache all DNS records\n", pihole_conf);
-	fputs("cache-rr=ANY\n", pihole_conf);
+	fprintf(pihole_conf, "cache-rr=%s\n\n", conf->dns.cache.rrtype.v.s);
 	fputs("\n", pihole_conf);
 
 	// Add option for PCAP file recording

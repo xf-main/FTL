@@ -34,8 +34,6 @@
 #include <sys/prctl.h>
 // config struct
 #include "config/config.h"
-// PRIi64
-#include <inttypes.h>
 // log_ntp_message()
 #include "database/message-table.h"
 // NTP_SERVER_IPV4,6
@@ -46,7 +44,7 @@
 #include "timers.h"
 
 uint64_t ntp_last_sync = 0u;
-int32_t ntp_root_delay = 0u;
+uint32_t ntp_root_delay = 0u;
 uint32_t ntp_root_dispersion = 0u;
 uint8_t ntp_stratum = 0u;
 

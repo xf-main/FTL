@@ -18,11 +18,11 @@
 #include "config/setupVars.h"
 // counters
 #include "shmem.h"
-// get_FTL_db_filesize()
+// get_FTL_db_stats()
 #include "files.h"
 // get_sqlite3_version()
 #include "database/common.h"
-// get_number_of_queries_in_DB()
+// get_db_info()
 #include "database/query-table.h"
 // getgrgid()
 #include <grp.h>
@@ -93,8 +93,8 @@ int api_info_database(struct ftl_conn *api)
 
 	// Add database stat details
 	struct stat st;
-	get_database_stat(&st);
-	JSON_ADD_NUMBER_TO_OBJECT(json, "size", st.st_size); // Total size, in bytes
+	off_t size = get_FTL_db_stats(&st);
+	JSON_ADD_NUMBER_TO_OBJECT(json, "size", size); // Total size, in bytes
 
 	// File type
 	const char *filetype;
@@ -148,13 +148,15 @@ int api_info_database(struct ftl_conn *api)
 
 	// Add number of queries and earliest timestamp in in-memory database
 	double earliest_timestamp_mem = 0.0;
-	const int queries_in_database = get_number_of_queries_in_DB(NULL, "query_storage", &earliest_timestamp_mem);
+	uint64_t queries_in_database = 0;
+	get_db_info(false, &queries_in_database, &earliest_timestamp_mem);
 	JSON_ADD_NUMBER_TO_OBJECT(json, "queries", queries_in_database);
 	JSON_ADD_NUMBER_TO_OBJECT(json, "earliest_timestamp", earliest_timestamp_mem);
 
 	// Add number of queries and earliest timestamp in on-disk database
 	double earliest_timestamp_disk = 0.0;
-	const int queries_in_disk_database = get_number_of_queries_in_DB(NULL, "disk.query_storage", &earliest_timestamp_disk);
+	uint64_t queries_in_disk_database = 0;
+	get_db_info(true, &queries_in_disk_database, &earliest_timestamp_disk);
 	JSON_ADD_NUMBER_TO_OBJECT(json, "queries_disk", queries_in_disk_database);
 	JSON_ADD_NUMBER_TO_OBJECT(json, "earliest_timestamp_disk", earliest_timestamp_disk);
 
@@ -937,7 +939,8 @@ static int api_info_messages_GET(struct ftl_conn *api)
 	}
 
 	// Filter messages if requested
-	if(config.misc.hide_dnsmasq_warn.v.b)
+	if(config.misc.hide_dnsmasq_warn.v.b ||
+	   config.misc.hide_connection_error.v.b)
 	{
 		// Create new array
 		cJSON *filtered = cJSON_CreateArray();
@@ -956,7 +959,11 @@ static int api_info_messages_GET(struct ftl_conn *api)
 				continue;
 
 			// Skip if it is a DNSMASQ_WARN message
-			if(strcmp(type->valuestring, "DNSMASQ_WARN") == 0)
+			if(config.misc.hide_dnsmasq_warn.v.b && strcmp(type->valuestring, "DNSMASQ_WARN") == 0)
+				continue;
+
+			// Skip if it is a CONNECTION_ERROR message
+			if(config.misc.hide_connection_error.v.b && strcmp(type->valuestring, "CONNECTION_ERROR") == 0)
 				continue;
 
 			// else: Add a copy to the filtered array

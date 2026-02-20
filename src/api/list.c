@@ -98,6 +98,7 @@ static int api_list_read(struct ftl_conn *api,
 				if(ret != 0)
 				{
 					JSON_DELETE(rows);
+					gravityDB_readTableFinalize();
 					return ret;
 				}
 

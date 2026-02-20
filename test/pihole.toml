@@ -1,7 +1,7 @@
-# Pi-hole configuration file (v6.2.3-312-g9f1eb768-dirty) on branch (no branch, rebasing misc_dnsmasq_warn)
+# Pi-hole configuration file (v6.4.1-55-g7208be13) on branch new/hide_connection_errors
 # Encoding: UTF-8
 # This file is managed by pihole-FTL
-# Last updated on 2025-10-23 17:03:51 UTC
+# Last updated on 2025-12-21 11:13:49 UTC
 
 [dns]
   # Upstream DNS Servers to be used by Pi-hole. If this is not set, Pi-hole will not
@@ -354,6 +354,14 @@
     #     A positive integer value in seconds, or zero to disable caching of upstream
     #     blocked queries
     upstreamBlockedTTL = 86400
+
+    # This is dnsmasq's --cache-rr option, which allows you to define which DNS record
+    # types should be cached by PiHole. This option can take a comma-separated list of
+    # RR-types as input. The default value ANY caches all record types.
+    #
+    # Allowed values are:
+    #     Valid DNS record types in the following form: <rrtype>[,<rrtype>...]
+    rrtype = "ANY"
 
   [dns.blocking]
     # Should FTL block queries?
@@ -812,6 +820,19 @@
   #     true or false
   useWAL = true
 
+  # Should FTL force the use of disk storage for the history database? By default, FTL
+  # uses an in-memory database for much improved performance when browsing the history
+  # from the dashboard. However, on systems with very limited RAM and only occasional
+  # usage of the web interface, it may be useful to force the use of disk storage
+  # instead of holding everything in memory.
+  #
+  # Note that using disk storage *will* reduce performance, especially on systems with
+  # slow storage media (e.g., SD cards).
+  #
+  # Allowed values are:
+  #     true or false
+  forceDisk = false
+
   [database.network]
     # Should FTL analyze the local ARP cache? When disabled, client identification and the
     # network table will stop working reliably.
@@ -943,7 +964,7 @@
   #     An array of HTTP headers
   headers = [
     "X-DNS-Prefetch-Control: off",
-    "Content-Security-Policy: default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;",
+    "Content-Security-Policy: default-src 'none'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; img-src 'self'; manifest-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
     "X-Frame-Options: DENY",
     "X-XSS-Protection: 0",
     "X-Content-Type-Options: nosniff",
@@ -1252,6 +1273,13 @@
   #     Any FTL database
   database = "/etc/pihole/pihole-FTL.db"
 
+  # The location of FTL's short-term temporary database (only used when
+  # database.forceDisk is true)
+  #
+  # Allowed values are:
+  #     Any FTL database
+  tmp_db = "/etc/pihole/pihole-tmp.db"
+
   # The location of Pi-hole's gravity database
   #
   # Allowed values are:
@@ -1374,6 +1402,9 @@
   #
   # Use this option with extra care.
   #
+  # Example: [ "address=/example.com/192.168.0.1", "address=/example.org/192.168.0.2",
+  # "address=/example.net/192.168.0.3" ]
+  #
   # Allowed values are:
   #     Array of valid dnsmasq config line options
   dnsmasq_lines = []
@@ -1423,6 +1454,19 @@
   # Allowed values are:
   #     true or false
   hide_dnsmasq_warn = false
+
+  # Should FTL hide network connection errors?
+  #
+  # By default, FTL reports network connection errors (e.g., Connection prematurely
+  # closed by remote server) to the FTL log file. These warnings can be useful to
+  # identify intermittent network problems or general problem with upstream servers.
+  # However, in some setups, these warnings may be expected (e.g. due to low-quality
+  # Internet connectivity) and cannot be fixed. Enabling this setting will hide all
+  # connection warnings.
+  #
+  # Allowed values are:
+  #     true or false
+  hide_connection_error = false
 
   [misc.check]
     # Pi-hole is very lightweight on resources. Nevertheless, this does not mean that you
@@ -1667,14 +1711,20 @@
   #     true or false
   netlink = true ### CHANGED, default = false
 
+  # Print timing information from various parts of FTL
+  #
+  # Allowed values are:
+  #     true or false
+  timing = true ### CHANGED, default = false
+
   # Set all debug flags at once. This is a convenience option to enable all debug flags
   # at once. Note that this option is not persistent, setting it to true will enable all
   # *remaining* debug flags but unsetting it will disable *all* debug flags.
   all = true ### CHANGED, default = false
 
 # Configuration statistics:
-# 161 total entries out of which 108 entries are default
-# --> 53 entries are modified
+# 166 total entries out of which 112 entries are default
+# --> 54 entries are modified
 # 3 entries are forced through environment:
 #   - misc.nice
 #   - misc.check.shmem

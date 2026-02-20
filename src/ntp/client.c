@@ -25,7 +25,7 @@
 #include <time.h>
 // errno
 #include <errno.h>
-// PRIi64
+// PRId64
 #include <inttypes.h>
 // config struct
 #include "config/config.h"
@@ -637,8 +637,8 @@ bool ntp_client(const char *server, const bool settime, const bool print)
 	theta_trim /= trim;
 	delta_trim /= trim;
 
-	log_info("Time offset: %e ms (excluded %u outliers)", 1e3*theta_trim, count - trim);
-	log_info("Round-trip delay: %e ms (excluded %u outliers)", 1e3*delta_trim, count - trim);
+	log_info("NTP time offset: %e ms (excluded %u outliers)", 1e3*theta_trim, count - trim);
+	log_info("NTP round-trip delay: %e ms (excluded %u outliers)", 1e3*delta_trim, count - trim);
 
 	// Set time if requested
 	if(settime)
@@ -665,19 +665,23 @@ bool ntp_client(const char *server, const bool settime, const bool print)
 		// Update last NTP sync time
 		ntp_last_sync = ntp_time;
 
-		// Compute our server's root dispersion and delay
-		// Both quantities are the maximum error and maximum delay of
-		// the server's time relative to the reference time. The root
-		// dispersion is the maximum error of the server's time relative
-		// to the reference time, while the root delay is the maximum
-		// delay of the server's time relative to the reference time
-		ntp_root_delay = D2FP(theta_trim);
-		ntp_root_dispersion = D2FP(theta_stdev);
-
 		// Finally, adjust RTC if configured
 		if(config.ntp.sync.rtc.set.v.b)
 			ntp_sync_rtc();
 	}
+
+	// Set our server's root delay and dispersion
+	// Following RFC5905, Scn. 4, the root delay (total round-trip delay to
+	// the reference clock) is DELTA while the root dispersion (total
+	// dispersion to the reference clock) is EPSILON. The synchronization
+	// distance (the maximum error due to all causes) may be calculated as
+	// (DELTA / 2) + EPSILON.
+	// Note that the root dispersion should increase over time due to clock
+	// drift, but we do not model this here. Instead, we update the root
+	// dispersion after each successful NTP sync to reflect the current
+	// dispersion of our reference clock.
+	ntp_root_delay = D2FP(delta_trim);
+	ntp_root_dispersion = D2FP(theta_stdev);
 
 	// Offset and delay larger than ACCURACY seconds are considered as invalid
 	// during local testing (e.g., when the server is on the same machine)
@@ -689,6 +693,10 @@ static void *ntp_client_thread(void *arg)
 	(void)arg;
 	// Set thread name
 	prctl(PR_SET_NAME, thread_names[NTP_CLIENT], 0, 0, 0);
+
+	// Artificial initial delay to allow DNS server to become available
+	thread_sleepms(NTP_CLIENT, 1000 * 10);
+	log_debug(DEBUG_NTP, "Starting NTP client");
 
 	// Run NTP client
 	unsigned int retry_count = 0;
@@ -737,8 +745,8 @@ static void *ntp_client_thread(void *arg)
 				// Reduce retry time if the time is not accurate enough
 				if(retry_count++ < RETRY_ATTEMPTS &&
 				   sleep_time > RETRY_INTERVAL)
-					sleep_time = RETRY_INTERVAL;
-									log_info("Local time is too inaccurate, retrying in %u seconds before launching NTP server", sleep_time);
+				   sleep_time = RETRY_INTERVAL;
+					log_info("Local time is too inaccurate, retrying in %u seconds before launching NTP server", sleep_time);
 			}
 		}
 
