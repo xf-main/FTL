@@ -11,20 +11,20 @@ index 6280ebf6..a5e82f70 100644
  
  #if !defined(_WIN32) && !defined(WIN32)
  # include <signal.h>
-@@ -36236,7 +36236,7 @@ static char *cmdline_option_value(int argc, char **argv, int i){
- **     fiddle_main          In Fiddle
- **     sqlite3_shell        Other projects that use shell.c as a subroutine
- */
+@@ -32902,7 +32904,7 @@ static char *cmdline_option_value(int argc, char **argv, int i){
+ #endif
+ 
+ #if SQLITE_SHELL_IS_UTF8
 -int SQLITE_CDECL main(int argc, char **argv){
 +int SQLITE_CDECL sqlite3_shell_main(int argc, char **argv){
- #ifdef SQLITE_DEBUG
-   sqlite3_int64 mem_main_enter = 0;
- #endif
-@@ -36882,6 +36882,7 @@ int SQLITE_CDECL wmain(int argc, wchar_t **wargv){
+ #else
+ int SQLITE_CDECL wmain(int argc, wchar_t **wargv){
+   char **argv;
+@@ -33656,6 +33658,7 @@ int SQLITE_CDECL wmain(int argc, wchar_t **wargv){
      if( stdin_is_interactive ){
        char *zHome;
        char *zHistory;
 +      print_FTL_version();
-       cli_printf(stdout,
+       sqlite3_fprintf(stdout,
              "SQLite version %s %.19s\n" /*extra-version-info*/
              "Enter \".help\" for usage hints.\n",
