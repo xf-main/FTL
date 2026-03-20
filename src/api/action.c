@@ -137,9 +137,14 @@ int api_action_gravity(struct ftl_conn *api)
 
 	const char *extra_env = color ? "FORCE_COLOR" : NULL;
 
-	gravity_running = true;
+	gravity_running = 1;
 	const int ret = run_and_stream_command(api, "/usr/local/bin/pihole", (const char *const []){ "pihole", "-g", NULL }, extra_env);
-	gravity_running = false;
+	gravity_running = 0;
+
+	// If a termination/restart was requested while gravity was running,
+	// act on it now rather than waiting up to ~1s for the GC thread to pick it up
+	check_if_want_terminate();
+
 	return ret;
 }
 

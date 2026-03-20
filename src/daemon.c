@@ -47,8 +47,8 @@
 pthread_t threads[THREADS_MAX] = { 0 };
 bool resolver_ready = false;
 bool dnsmasq_failed = false;
-bool gravity_running = false;
-bool want_terminate = false;
+volatile sig_atomic_t gravity_running = 0;
+volatile sig_atomic_t want_terminate = 0;
 
 void go_daemon(void)
 {
