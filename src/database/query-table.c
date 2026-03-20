@@ -909,11 +909,16 @@ bool delete_old_queries_from_db(const bool use_memdb, const double mintime)
 	if(okay)
 	{
 		// Update number of queries in either in-memory or on-disk
-		// database (depending on what was cleaned)
+		// database (depending on what was cleaned). Guard against
+		// underflow: if the counter is somehow already below the
+		// number deleted (e.g. after a failed import that set the
+		// counter to 0), clamp to 0 rather than wrapping to UINT64_MAX.
 		if(use_memdb)
-			memdb_queries_count -= deleted;
+			memdb_queries_count = (uint64_t)deleted <= memdb_queries_count
+			                      ? memdb_queries_count - (uint64_t)deleted : 0u;
 		else
-			diskdb_queries_count -= deleted;
+			diskdb_queries_count = (uint64_t)deleted <= diskdb_queries_count
+			                       ? diskdb_queries_count - (uint64_t)deleted : 0u;
 	}
 
 	// Finalize statement
