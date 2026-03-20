@@ -156,6 +156,11 @@ void savePID(void)
  */
 static void removePID(void)
 {
+	// Config may not have been loaded (e.g. crash/backtrace subcommands),
+	// in which case no PID file was ever written — nothing to remove.
+	if(config.files.pid.v.s == NULL)
+		return;
+
 	FILE *f = NULL;
 	// Open file for writing to overwrite/empty it
 	if((f = fopen(config.files.pid.v.s, "w")) == NULL)
