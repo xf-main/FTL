@@ -1408,15 +1408,14 @@ void suggest_complete(const int argc, char *argv[])
 	{
 		// Root-level suggestion: "pihole-FTL ..."
 		const char *options[] = {
-			"arp-scan", "branch", "--config", "debug", "--default-gateway",
-			"dhcp-discover", "dnsmasq-test", "-f", "--gen-x509",
-			"gravity", "gzip", "help", "-h", "--help", "idn2",
-			"--list-dhcp4", "--list-dhcp6", "--lua", "--luac",
-			"lua", "luac", "ntp", "no-daemon", "--perf", "ptr",
-			"--read-x509", "--read-x509-key", "regex-test",
-			"sha256sum", "sqlite3", "sqlite3_rsync", "tag",
-			"--teleporter", "test", "--totp", "--tls-ciphers",
-			"-v", "-vv", "--v", "version", "verify",
+			"arp-scan", "branch", "backtrace", "crash", "--config", "debug",
+		    "--default-gateway", "dhcp-discover", "dnsmasq-test", "-f",
+		    "--gen-x509", "gravity", "gzip", "help", "-h", "--help", "idn2",
+			"--list-dhcp4", "--list-dhcp6", "--lua", "--luac", "lua",
+		    "luac", "ntp", "no-daemon", "--perf", "ptr", "--read-x509",
+		    "--read-x509-key", "regex-test", "sha256sum", "sqlite3",
+		    "sqlite3_rsync", "tag", "--teleporter", "test", "--totp",
+		    "--tls-ciphers", "-v", "-vv", "--v", "version", "verify",
 		};
 
 		// Provide matching suggestions
