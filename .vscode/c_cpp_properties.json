@@ -5,7 +5,7 @@
             "includePath": [
                 "${workspaceFolder}/src/**"
             ],
-            "compileCommands": "${workspaceFolder}/build/compile_commands.json",
+            "compileCommands": "${workspaceFolder}/cmake/compile_commands.json",
             "defines": [],
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "gnu17",

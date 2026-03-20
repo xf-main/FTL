@@ -348,10 +348,30 @@ add_subdirectory(config)
 add_subdirectory(tools)
 add_subdirectory(ntp)
 
+# optional headers - may depend on type or version of the C standard library
+include(CheckIncludeFile)
+
+check_include_file("sys/random.h" HAVE_RANDOM_H)
+if(HAVE_RANDOM_H)
+    target_compile_definitions(config PRIVATE USE_GETRANDOM)
+    target_compile_definitions(core PRIVATE USE_GETRANDOM)
+endif()
+
+check_include_file("execinfo.h" HAVE_EXECINFO_H)
+if(HAVE_EXECINFO_H)
+	message(STATUS "Building FTL with unwind support: YES")
+    target_compile_definitions(core PRIVATE USE_BACKTRACE)
+else()
+	message(STATUS "Building FTL with unwind support: NO")
+endif()
+
+
+option(USE_READLINE "Build FTL with readline support, if available" ON)
+
 find_library(LIBREADLINE NAMES libreadline${LIBRARY_SUFFIX} readline)
 find_library(LIBHISTORY NAMES libhistory${LIBRARY_SUFFIX} history)
 find_library(LIBTERMCAP NAMES libtermcap${LIBRARY_SUFFIX} termcap)
-if(LIBREADLINE AND LIBHISTORY AND LIBTERMCAP)
+if(LIBREADLINE AND LIBHISTORY AND LIBTERMCAP AND USE_READLINE)
     message(STATUS "Building FTL with readline support: YES")
     target_compile_definitions(lua PRIVATE LUA_USE_READLINE)
     target_compile_definitions(sqlite3 PRIVATE HAVE_READLINE)
@@ -364,11 +384,13 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set(CMAKE_INSTALL_PREFIX "/usr" CACHE PATH "..." FORCE)
 endif()
 
+option(USE_MBED_TLS "Build FTL with TLS support, if available" ON)
+
 find_library(LIBMBEDCRYPTO NAMES lmbedcrypto${LIBRARY_SUFFIX} mbedcrypto)
 find_library(LIBMBEDX509 NAMES lmbedx509${LIBRARY_SUFFIX} mbedx509)
 find_library(LIBMBEDTLS NAMES lmbedtls${LIBRARY_SUFFIX} mbedtls)
-if(LIBMBEDCRYPTO AND LIBMBEDX509 AND LIBMBEDTLS)
-    # Enable TLS support in civetweb if mbedTLS is available
+if(LIBMBEDCRYPTO AND LIBMBEDX509 AND LIBMBEDTLS AND USE_MBED_TLS)
+    # Enable TLS support in civetweb if mbedTLS is selected and available
     message(STATUS "Building FTL with TLS support: YES")
     target_compile_definitions(core PRIVATE HAVE_MBEDTLS)
     target_compile_definitions(civetweb PRIVATE USE_MBEDTLS)
@@ -376,7 +398,7 @@ if(LIBMBEDCRYPTO AND LIBMBEDX509 AND LIBMBEDTLS)
     # Link against the mbedTLS libraries, the order is important (!)
     target_link_libraries(pihole-FTL ${LIBMBEDTLS} ${LIBMBEDX509} ${LIBMBEDCRYPTO})
 else()
-    # Disable TLS support in civetweb if mbedTLS is not available
+    # Disable TLS support in civetweb if mbedTLS is not selected or not available
     message(STATUS "Building FTL with TLS support: NO")
     target_compile_definitions(civetweb PRIVATE NO_SSL)
 endif()

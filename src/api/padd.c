@@ -129,6 +129,7 @@ int api_padd(struct ftl_conn *api)
 	JSON_ADD_NUMBER_TO_OBJECT(queries, "total", total);
 	JSON_ADD_NUMBER_TO_OBJECT(queries, "blocked", blocked);
 	JSON_ADD_NUMBER_TO_OBJECT(queries, "percent_blocked", percent_blocked);
+	JSON_ADD_NUMBER_TO_OBJECT(queries, "query_frequency", get_qps());
 	JSON_ADD_ITEM_TO_OBJECT(json, "queries", queries);
 
 	// Add cache statistics

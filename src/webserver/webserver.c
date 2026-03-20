@@ -33,7 +33,9 @@
 // thread_names
 #include "signals.h"
 
+#ifdef HAVE_MBEDTLS
 #include <mbedtls/ssl_ciphersuites.h>
+#endif /* HAVE_MBEDTLS */
 
 // Server context handle
 static struct mg_context *ctx = NULL;
@@ -876,9 +878,6 @@ void http_init(void)
 	// Prepare prerequisites for Lua
 	allocate_lua(login_uri, admin_api_uri, prefix_webhome);
 
-	// Restore sessions from database
-	init_api();
-
 	// Create CLI password (if enabled)
 	create_cli_password();
 }
@@ -996,6 +995,7 @@ void http_terminate(void)
 		free(login_uri);
 }
 
+#ifdef HAVE_MBEDTLS
 static void restart_http(void)
 {
 	// Stop the server
@@ -1004,6 +1004,7 @@ static void restart_http(void)
 	// Reinitialize the webserver
 	http_init();
 }
+#endif /* HAVE_MBEDTLS */
 
 /**
  * @brief Prints all supported TLS cipher suites by mbedTLS.
@@ -1019,6 +1020,7 @@ static void restart_http(void)
  */
 void get_all_supported_ciphersuites(void)
 {
+#ifdef HAVE_MBEDTLS
 	const int *all = mbedtls_ssl_list_ciphersuites();
 	printf("Supported TLS cipher suites:\n");
 	for (size_t i = 0; all[i] != 0; ++i)
@@ -1029,8 +1031,10 @@ void get_all_supported_ciphersuites(void)
 		const size_t bitlen = mbedtls_ssl_ciphersuite_get_cipher_key_bitlen(suite_info);
 		printf("- %s (Cipher ID: %d, Key length: %zu bits)\n", suite_name, all[i], bitlen);
 	}
+#endif /* HAVE_MBEDTLS */
 }
 
+#ifdef HAVE_MBEDTLS
 void *webserver_thread(void *val)
 {
 	(void)val;
@@ -1082,3 +1086,4 @@ void *webserver_thread(void *val)
 	log_info("Terminating webserver thread");
 	return NULL;
 }
+#endif /* HAVE_MBEDTLS */

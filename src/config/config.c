@@ -948,6 +948,12 @@ void initConfig(struct config *conf)
 	conf->resolver.resolveIPv6.d.b = true;
 	conf->resolver.resolveIPv6.c = validate_stub; // Only type-based checking
 
+	conf->resolver.macNames.k = "resolver.macNames";
+	conf->resolver.macNames.h = "Control whether FTL should attempt to obtain client names from the network table by MAC address.\n\nThis can provide hostnames for devices that do not have a hostname or have multiple IP addresses (e.g. IPv4 and IPv6).\nHowever, MAC-derived names can be ambiguous (e.g., when a MAC appears for multiple IPs due to a router/NAT or MAC reuse), which may lead to incorrect hostnames being shown. Disabling this option can prevent such issues but may lead to more clients without hostnames.";
+	conf->resolver.macNames.t = CONF_BOOL;
+	conf->resolver.macNames.d.b = true;
+	conf->resolver.macNames.c = validate_stub; // Only type-based checking
+
 	conf->resolver.resolveIPv4.k = "resolver.resolveIPv4";
 	conf->resolver.resolveIPv4.h = "Should FTL try to resolve IPv4 addresses to hostnames?";
 	conf->resolver.resolveIPv4.t = CONF_BOOL;
@@ -1078,7 +1084,7 @@ void initConfig(struct config *conf)
 	conf->webserver.headers.f = FLAG_RESTART_FTL;
 	conf->webserver.headers.d.json = cJSON_CreateArray();
 	cJSON_AddItemToArray(conf->webserver.headers.d.json, cJSON_CreateStringReference("X-DNS-Prefetch-Control: off"));
-	cJSON_AddItemToArray(conf->webserver.headers.d.json, cJSON_CreateStringReference("Content-Security-Policy: default-src 'none'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; img-src 'self'; manifest-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"));
+	cJSON_AddItemToArray(conf->webserver.headers.d.json, cJSON_CreateStringReference("Content-Security-Policy: default-src 'none'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; img-src 'self'; manifest-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; form-action 'self'"));
 	cJSON_AddItemToArray(conf->webserver.headers.d.json, cJSON_CreateStringReference("X-Frame-Options: DENY"));
 	cJSON_AddItemToArray(conf->webserver.headers.d.json, cJSON_CreateStringReference("X-XSS-Protection: 0"));
 	cJSON_AddItemToArray(conf->webserver.headers.d.json, cJSON_CreateStringReference("X-Content-Type-Options: nosniff"));

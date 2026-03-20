@@ -86,6 +86,10 @@ components:
               type: number
               description: "Percentage of blocked queries"
               example: 5.18
+            query_frequency:
+              type: number
+              description: "Average number of queries per second"
+              example: 1.1
         cache:
           type: object
           properties:

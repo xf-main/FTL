@@ -1,5 +1,11 @@
 #!./test/libs/bats/bin/bats
 
+# Log the current test description to the FTL log at the start of each test.
+# `setup()` is run by bats before every `@test` block.
+setup() {
+  printf 'Starting test: %s\n' "$BATS_TEST_DESCRIPTION" >> /var/log/pihole/FTL.log
+}
+
 @test "Compare template and test TOML config files" {
   # We skip the first 5 lines of the files as they contain the version and
   # timestamp of the file creation/modification
@@ -182,10 +188,10 @@
   run bash -c "grep -c \"Gravity database: Client aa:bb:cc:dd:ee:ff found. Using groups (4)\" /var/log/pihole/FTL.log"
   printf "%s\n" "${lines[@]}"
   [[ ${lines[0]} != "0" ]]
-  run bash -c "grep -c 'Regex deny: Querying groups for client 127.0.0.4: \"SELECT id from vw_regex_denylist WHERE group_id IN (4);\"' /var/log/pihole/FTL.log"
+  run bash -c "grep -c 'Regex deny: Querying associated regexes for client 127.0.0.4: \"SELECT id from vw_regex_denylist WHERE group_id IN (4);\"' /var/log/pihole/FTL.log"
   printf "%s\n" "${lines[@]}"
   [[ ${lines[0]} == "1" ]]
-  run bash -c "grep -c 'Regex allow: Querying groups for client 127.0.0.4: \"SELECT id from vw_regex_allowlist WHERE group_id IN (4);\"' /var/log/pihole/FTL.log"
+  run bash -c "grep -c 'Regex allow: Querying associated regexes for client 127.0.0.4: \"SELECT id from vw_regex_allowlist WHERE group_id IN (4);\"' /var/log/pihole/FTL.log"
   printf "%s\n" "${lines[@]}"
   [[ ${lines[0]} == "1" ]]
   run bash -c "grep -c 'build_client_querystr: SELECT id from vw_allowlist WHERE domain = ? AND group_id IN (4);' /var/log/pihole/FTL.log"
@@ -220,10 +226,10 @@
   run bash -c "grep -c \"Gravity database: Client aa:bb:cc:dd:ee:ff found. Using groups (4)\" /var/log/pihole/FTL.log"
   printf "%s\n" "${lines[@]}"
   [[ ${lines[0]} != "0" ]]
-  run bash -c "grep -c 'Regex deny: Querying groups for client 127.0.0.5: \"SELECT id from vw_regex_denylist WHERE group_id IN (4);\"' /var/log/pihole/FTL.log"
+  run bash -c "grep -c 'Regex deny: Querying associated regexes for client 127.0.0.5: \"SELECT id from vw_regex_denylist WHERE group_id IN (4);\"' /var/log/pihole/FTL.log"
   printf "%s\n" "${lines[@]}"
   [[ ${lines[0]} == "1" ]]
-  run bash -c "grep -c 'Regex allow: Querying groups for client 127.0.0.5: \"SELECT id from vw_regex_allowlist WHERE group_id IN (4);\"' /var/log/pihole/FTL.log"
+  run bash -c "grep -c 'Regex allow: Querying associated regexes for client 127.0.0.5: \"SELECT id from vw_regex_allowlist WHERE group_id IN (4);\"' /var/log/pihole/FTL.log"
   printf "%s\n" "${lines[@]}"
   [[ ${lines[0]} == "1" ]]
   run bash -c "grep -c 'build_client_querystr: SELECT id from vw_allowlist WHERE domain = ? AND group_id IN (4);' /var/log/pihole/FTL.log"
@@ -264,10 +270,10 @@
   run bash -c "grep -c \"Gravity database: Client 00:11:22:33:44:55 found (identified by interface enp0s123). Using groups (5)\" /var/log/pihole/FTL.log"
   printf "%s\n" "${lines[@]}"
   [[ ${lines[0]} == "1" ]]
-  run bash -c "grep -c 'Regex deny: Querying groups for client 127.0.0.6: \"SELECT id from vw_regex_denylist WHERE group_id IN (5);\"' /var/log/pihole/FTL.log"
+  run bash -c "grep -c 'Regex deny: Querying associated regexes for client 127.0.0.6: \"SELECT id from vw_regex_denylist WHERE group_id IN (5);\"' /var/log/pihole/FTL.log"
   printf "%s\n" "${lines[@]}"
   [[ ${lines[0]} == "1" ]]
-  run bash -c "grep -c 'Regex allow: Querying groups for client 127.0.0.6: \"SELECT id from vw_regex_allowlist WHERE group_id IN (5);\"' /var/log/pihole/FTL.log"
+  run bash -c "grep -c 'Regex allow: Querying associated regexes for client 127.0.0.6: \"SELECT id from vw_regex_allowlist WHERE group_id IN (5);\"' /var/log/pihole/FTL.log"
   printf "%s\n" "${lines[@]}"
   [[ ${lines[0]} == "1" ]]
   run bash -c "grep -c 'build_client_querystr: SELECT id from vw_allowlist WHERE domain = ? AND group_id IN (5);' /var/log/pihole/FTL.log"
@@ -792,7 +798,7 @@
   [[ "${lines[@]}" == "" ]]
 }
 
-@test "No \"database not available\" messages in FTL.log" {
+@test "No \"DB not available\" messages in FTL.log" {
   run bash -c 'grep -c "database not available" /var/log/pihole/FTL.log'
   printf "%s\n" "${lines[@]}"
   [[ ${lines[0]} == "0" ]]
@@ -2243,7 +2249,17 @@
 }
 
 @test "API validation" {
+  if [ "${CI_ARCH:-}" = "linux/riscv64" ]; then
+    skip "Skipping API validation on linux/riscv64"
+  fi
+  logsize_before=$(stat -c%s /var/log/pihole/FTL.log)
   run python3 test/api/checkAPI.py
+  printf "%s\n" "${lines[@]}"
+  [[ $status == 0 ]]
+
+  # Wait here until FTL has finished restarting after the teleporter import,
+  # otherwise the next test might start before FTL is ready
+  run bash -c "./pihole-FTL wait-for 'PID of FTL process:' /var/log/pihole/FTL.log 90 $logsize_before"
   printf "%s\n" "${lines[@]}"
   [[ $status == 0 ]]
 }
@@ -2324,7 +2340,7 @@
   [[ $status == 0 ]]
   run bash -c 'grep -F "Webserver option 6/12: authentication_domain=pi.hole" /var/log/pihole/FTL.log'
   [[ $status == 0 ]]
-  run bash -c 'grep -F "Webserver option 7/12: additional_header=X-DNS-Prefetch-Control: off\r\nContent-Security-Policy: default-src '"'none'"'; connect-src '"'self'"'; font-src '"'self'"'; frame-ancestors '"'none'"'; img-src '"'self'"'; manifest-src '"'self'"'; script-src '"'self'"'; style-src '"'self'"' '"'unsafe-inline'"'\r\nX-Frame-Options: DENY\r\nX-XSS-Protection: 0\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: strict-origin-when-cross-origin\r\n" /var/log/pihole/FTL.log'
+  run bash -c 'grep -F "Webserver option 7/12: additional_header=X-DNS-Prefetch-Control: off\r\nContent-Security-Policy: default-src '"'none'"'; connect-src '"'self'"'; font-src '"'self'"'; frame-ancestors '"'none'"'; img-src '"'self'"'; manifest-src '"'self'"'; script-src '"'self'"'; style-src '"'self'"' '"'unsafe-inline'"'; form-action '"'self'"'\r\nX-Frame-Options: DENY\r\nX-XSS-Protection: 0\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: strict-origin-when-cross-origin\r\n" /var/log/pihole/FTL.log'
   [[ $status == 0 ]]
   run bash -c 'grep -F "Webserver option 8/12: index_files=index.html,index.htm,index.lp" /var/log/pihole/FTL.log'
   [[ $status == 0 ]]
@@ -2342,7 +2358,10 @@
   logsize_before=$(stat -c%s /var/log/pihole/FTL.log)
   # Kill pihole-FTL after having completed tests
   # This will also shut down the debugger
-  run bash -c 'kill "$(pidof pihole-FTL)"'
+  pid=$(cat /run/pihole-FTL.pid)
+  printf "Killing pihole-FTL with PID %s\n" "$pid"
+
+  run bash -c "kill $pid"
   printf "%s\n" "${lines[@]}"
   [[ $status == 0 ]]
 

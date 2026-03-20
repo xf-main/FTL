@@ -37,7 +37,10 @@ static struct flag_names iflatypes[] =
 	{ ARPHRD_X25, "x25" },
 	{ ARPHRD_HWX25, "hwx25" },
 	{ ARPHRD_CAN, "can" },
+#if defined (ARPHRD_MCTP)
+	// 2025-May: kernel version dependent
 	{ ARPHRD_MCTP, "mctp" },
+#endif
 	{ ARPHRD_PPP, "ppp" },
 	{ ARPHRD_CISCO, "cisco" },
 	{ ARPHRD_HDLC, "hdlc" },
@@ -145,7 +148,10 @@ static struct flag_names rtprots[] = {
 	{ RTPROT_MROUTED, "mrouted" },
 	{ RTPROT_KEEPALIVED, "keepalived" },
 	{ RTPROT_BABEL, "babel" },
+#if defined (RTPROT_OPENR)
+	// 2025-May: kernel version dependent
 	{ RTPROT_OPENR, "openr" },
+#endif
 	{ RTPROT_BGP, "bgp" },
 	{ RTPROT_ISIS, "isis" },
 	{ RTPROT_OSPF, "ospf" },
@@ -185,7 +191,10 @@ static struct flag_names rtmflags[] = {
 	{ RTM_F_FIB_MATCH, "fib_match" },
 	{ RTM_F_OFFLOAD, "offload" },
 	{ RTM_F_TRAP, "trap" },
+#if defined (RTM_F_OFFLOAD_FAILED)
+	// 2025-May: kernel version dependent
 	{ RTM_F_OFFLOAD_FAILED, "offload_failed" },
+#endif
 };
 
 static struct flag_names rtnhflags[] = {
@@ -195,7 +204,10 @@ static struct flag_names rtnhflags[] = {
 	{ RTNH_F_OFFLOAD, "offload" },
 	{ RTNH_F_LINKDOWN, "linkdown" },
 	{ RTNH_F_UNRESOLVED, "unresolved" },
+#if defined (RTNH_F_TRAP)
+	// 2025-May: kernel version dependent
 	{ RTNH_F_TRAP, "trap" },
+#endif
 };
 
 static struct flag_names ifstates[] = {
@@ -439,10 +451,16 @@ static const char *__attribute__ ((const)) iflaTypeToString(const int ifla_type)
 			return "perm_address";
 		case IFLA_PROTO_DOWN_REASON:
 			return "proto_down_reason";
+#if defined (IFLA_PARENT_DEV_NAME)
+		// 2025-May: kernel version dependent
 		case IFLA_PARENT_DEV_NAME:
 			return "parent_dev_name";
+#endif
+#if defined (IFLA_PARENT_DEV_BUS_NAME)
+		// 2025-May: kernel version dependent
 		case IFLA_PARENT_DEV_BUS_NAME:
 			return "parent_dev_bus_name";
+#endif
 		default:
 			return "unknown";
 	}
@@ -522,10 +540,16 @@ static const char *__attribute__ ((const)) family_name(int family)
 			return "wanpipe";
 		case PF_LLC:
 			return "llc";
+#if defined (PF_IB)
+		// 2025-May: defined by glibc but not uClibc
 		case PF_IB:
 			return "ib";
+#endif
+#if defined (PF_MPLS)
+		// 2025-May: defined by glibc but not uClibc
 		case PF_MPLS:
 			return "mpls";
+#endif
 		case PF_CAN:
 			return "can";
 		case PF_TIPC:
@@ -556,8 +580,11 @@ static const char *__attribute__ ((const)) family_name(int family)
 			return "qipcrtr";
 		case PF_SMC:
 			return "smc";
+#if defined (PF_XDP)
+		// 2025-May: defined by glibc but not uClibc
 		case PF_XDP:
 			return "xdp";
+#endif
 #ifdef PF_MCTP
 		// 2024-July: defined by glibc but not musl
 		case PF_MCTP:

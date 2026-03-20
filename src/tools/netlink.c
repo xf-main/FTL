@@ -610,8 +610,14 @@ static int nlparsemsg_link(struct ifinfomsg *ifi, void *buf, size_t len, cJSON *
 			case IFLA_ALT_IFNAME:
 			case IFLA_PHYS_PORT_NAME:
 			case IFLA_QDISC:
+#if defined (IFLA_PARENT_DEV_NAME)
+			// 2025-May: kernel version dependent
 			case IFLA_PARENT_DEV_NAME:
+#endif
+#if defined (IFLA_PARENT_DEV_BUS_NAME)
+			// 2025-May: kernel version dependent
 			case IFLA_PARENT_DEV_BUS_NAME:
+#endif
 			{
 				if(!detailed)
 					break;

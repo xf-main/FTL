@@ -1535,14 +1535,9 @@ void DB_read_queries(void)
 	}
 
 	if( rc == SQLITE_DONE )
-	{
-		db_import_done = true;
 		log_info("Imported %zu queries from the long-term database", imported_queries);
-	}
 	else
-	{
 		log_err("DB_read_queries() - SQL error step: %s", sqlite3_errstr(rc));
-	}
 
 	if((int)imported_queries < counted_queries)
 	{

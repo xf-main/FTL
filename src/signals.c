@@ -9,7 +9,8 @@
 *  Please see LICENSE file for your rights under this license. */
 
 #include "FTL.h"
-#if defined(__GLIBC__)
+#if defined(USE_BACKTRACE)
+// backtrace(), backtrace_symbols()
 #include <execinfo.h>
 #endif
 #include "signals.h"
@@ -56,7 +57,7 @@ static char * __attribute__ ((nonnull (1))) getthread_name(char buffer[16])
 	return buffer;
 }
 
-#if defined(__GLIBC__)
+#if defined(USE_BACKTRACE)
 static void print_addr2line(const char *symbol, const void *address, const int j, const void *offset)
 {
 	// Only do this analysis for our own binary (skip trying to analyse libc.so, etc.)
@@ -98,13 +99,13 @@ static void print_addr2line(const char *symbol, const void *address, const int j
 	if(addr2line != NULL)
 		pclose(addr2line);
 }
-#endif
+#endif // USE_BACKTRACE
 
 // Log backtrace
 void generate_backtrace(void)
 {
-// Check GLIBC availability as MUSL does not support live backtrace generation
-#if defined(__GLIBC__)
+// Live backtrace generation is not supported by every C standard library
+#if defined(USE_BACKTRACE)
 	// Try to obtain backtrace. This may not always be helpful, but it is better than nothing
 	void *buffer[255];
 	const int calls = backtrace(buffer, sizeof(buffer)/sizeof(void *));
@@ -140,7 +141,7 @@ void generate_backtrace(void)
 	free(bcktrace);
 #else
 	log_info("!!! INFO: pihole-FTL has not been compiled with glibc/backtrace support, not generating one !!!");
-#endif
+#endif // USE_BACKTRACE
 }
 
 /**
@@ -213,8 +214,14 @@ static void __attribute__((noreturn)) signal_handler(int sig, siginfo_t *si, voi
 			case BUS_ADRALN:    log_info("     with code:  BUS_ADRALN (Invalid address alignment)"); break;
 			case BUS_ADRERR:    log_info("     with code:  BUS_ADRERR (Non-existent physical address)"); break;
 			case BUS_OBJERR:    log_info("     with code:  BUS_OBJERR (Object specific hardware error)"); break;
+#if defined (BUS_MCEERR_AR)
+			// 2025-May: not defined by uClibc
 			case BUS_MCEERR_AR: log_info("     with code:  BUS_MCEERR_AR (Hardware memory error: action required)"); break;
+#endif
+#if defined (BUS_MCEERR_AO)
+			// 2025-May: not defined by uClibc
 			case BUS_MCEERR_AO: log_info("     with code:  BUS_MCEERR_AO (Hardware memory error: action optional)"); break;
+#endif
 			default:            log_info("     with code:  Unknown (%i)", si->si_code); break;
 		}
 	}

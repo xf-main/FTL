@@ -43,9 +43,10 @@ static void add_request_info(struct ftl_conn *api, const char *csrf)
 	memset((int*)&api->request->is_authenticated, 1, sizeof(api->request->is_authenticated));
 }
 
-void init_api(void)
+void init_api_sessions(void)
 {
 	// Restore sessions from database
+	log_debug(DEBUG_API, "Initializing API sessions, maximum sessions: %u", config.webserver.api.max_sessions.v.u16);
 	max_sessions = config.webserver.api.max_sessions.v.u16;
 	auth_data = calloc(max_sessions, sizeof(struct session));
 	if(auth_data == NULL)

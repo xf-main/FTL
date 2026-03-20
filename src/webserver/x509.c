@@ -12,10 +12,6 @@
 #include "log.h"
 #include "x509.h"
 
-#ifndef HAVE_MBEDTLS
-#define HAVE_MBEDTLS
-#endif
-
 #ifdef HAVE_MBEDTLS
 # ifndef MBEDTLS_MPI_INIT
 # define MBEDTLS_MPI_INIT { 0, 1, 0 }

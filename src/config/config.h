@@ -232,6 +232,7 @@ struct config {
 	struct {
 		struct conf_item resolveIPv4;
 		struct conf_item resolveIPv6;
+		struct conf_item macNames;
 		struct conf_item networkNames;
 		struct conf_item refreshNames;
 	} resolver;

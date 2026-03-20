@@ -391,6 +391,8 @@ components:
                   type: boolean
                 resolveIPv6:
                   type: boolean
+                macNames:
+                  type: boolean
                 networkNames:
                   type: boolean
                 refreshNames:
@@ -773,6 +775,7 @@ components:
           resolver:
             resolveIPv4: true
             resolveIPv6: true
+            macNames: true
             networkNames: true
             refreshNames: IPV4_ONLY
           database:
@@ -791,7 +794,7 @@ components:
             threads: 0
             headers:
               - "X-DNS-Prefetch-Control: off"
-              - "Content-Security-Policy: default-src 'none'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; img-src 'self'; manifest-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+              - "Content-Security-Policy: default-src 'none'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; img-src 'self'; manifest-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; form-action 'self'"
               - "X-Frame-Options: DENY"
               - "X-XSS-Protection: 0"
               - "X-Content-Type-Options: nosniff"

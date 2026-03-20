@@ -278,6 +278,13 @@ static int find_device_by_hwaddr(sqlite3 *db, const char hwaddr[])
 	if(FTLDBerror())
 		return DB_FAILED;
 
+	// Return early if we know MAC addresses are not unique
+	if(!config.resolver.macNames.v.b)
+	{
+		log_debug(DEBUG_ARP, "find_device_by_hwaddr(%s) - returning early", hwaddr);
+		return DB_NODATA;
+	}
+
 	log_debug(DEBUG_ARP, "find_device_by_hwaddr(%s)", hwaddr);
 
 	const char *querystr = "SELECT id FROM network WHERE hwaddr = ?1 COLLATE NOCASE;";
@@ -2129,6 +2136,22 @@ bool getNameFromIP(sqlite3 *db, char hostn[MAXDOMAINLEN], const char *ipaddr)
 		hostn[MAXDOMAINLEN - 1] = '\0';
 
 		log_debug(DEBUG_RESOLVER, "Found database host name (same address) %s -> %s", ipaddr, hostn);
+
+		// Check if there are further host names for the same IP address
+		// and log a warning if there are multiple different host names
+		// for the same IP address
+		while((rc = sqlite3_step(stmt)) == SQLITE_ROW)
+		{
+			char other_hostn[MAXDOMAINLEN];
+			strncpy(other_hostn, (char*)sqlite3_column_text(stmt, 0), MAXDOMAINLEN);
+			other_hostn[MAXDOMAINLEN - 1] = '\0';
+
+			if(strcmp(hostn, other_hostn) != 0)
+			{
+				log_warn("Multiple different host names for the same IP address %s: \"%s\" and \"%s\"",
+				         ipaddr, hostn, other_hostn);
+			}
+		}
 	}
 	else if(rc != SQLITE_DONE)
 	{
@@ -2230,6 +2253,13 @@ bool getNameFromMAC(const char *client, char hostn[MAXDOMAINLEN])
 	// Return early if database is known to be broken
 	if(FTLDBerror())
 		return false;
+
+	// Check if we want to obtain names from MAC addresses at all
+	if(!config.resolver.macNames.v.b)
+	{
+		log_debug(DEBUG_RESOLVER, "getNameFromMAC(\"%s\") - configured to not obtain host name from MAC", client);
+		return false;
+	}
 
 	// Open pihole-FTL.db database file
 	sqlite3 *db = NULL;

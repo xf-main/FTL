@@ -45,9 +45,10 @@ pid_t FTL_gettid(void);
 
 // getrandom() is only available since glibc 2.25
 // https://www.gnu.org/software/gnulib/manual/html_node/sys_002frandom_002eh.html
-#if !defined(__GLIBC__) || __GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 25)
+#if defined(USE_GETRANDOM)
 #include <sys/random.h>
 #else
+#define GRND_NONBLOCK 0x0001
 #define getrandom getrandom_fallback
 #endif
 

@@ -357,7 +357,7 @@ static bool get_client_groupids(clientsData *client)
 	// 2. If found -> Get groups by looking up MAC address in client table
 	char hwaddr[MAXMACLEN] = { 0 };
 	bool got_hwaddr = false;
-	if(chosen_match_id < 0)
+	if(chosen_match_id < 0 && config.resolver.macNames.v.b)
 	{
 		log_debug(DEBUG_CLIENTS, "Querying gravity database for MAC address of %s...", ip);
 
@@ -413,7 +413,7 @@ static bool get_client_groupids(clientsData *client)
 		// Check if client is configured through the client table
 		// This will return nothing if the client is unknown/unconfigured
 		// We use COLLATE NOCASE to ensure the comparison is done case-insensitive
-		querystr = "SELECT id FROM client WHERE ip = ? COLLATE NOCASE;";
+		querystr = "SELECT id FROM client WHERE ip = ? COLLATE NOCASE";
 
 		// Prepare query
 		rc = sqlite3_prepare_v2(gravity_db, querystr, -1, &table_stmt, NULL);
@@ -476,12 +476,14 @@ static bool get_client_groupids(clientsData *client)
 			log_debug(DEBUG_CLIENTS, "--> No result.");
 
 		if(got_name && hostname[0] == '\0')
+		{
 			log_debug(DEBUG_CLIENTS, "Skipping empty host name lookup");
+			got_name = false;
+		}
 	}
 
-	// Check if we received a valid MAC address
-	// This ensures we skip mock hardware addresses such as "ip-127.0.0.1"
-	if(!got_name)
+	// Check if we received a valid host name
+	if(got_name)
 	{
 		log_debug(DEBUG_CLIENTS, "--> Querying client table for %s", hostname);
 
@@ -689,12 +691,12 @@ static bool get_client_groupids(clientsData *client)
 	{
 		if(got_iface)
 		{
-			log_debug(DEBUG_CLIENTS, "Gravity database: Client %s found (identified by interface %s). Using groups (%s)\n",
+			log_debug(DEBUG_CLIENTS, "Gravity database: Client %s found (identified by interface %s). Using groups (%s)",
 			          show_client_string(hwaddr, hostname, ip), interface, getstr(client->groupspos));
 		}
 		else
 		{
-			log_debug(DEBUG_CLIENTS, "Gravity database: Client %s found. Using groups (%s)\n",
+			log_debug(DEBUG_CLIENTS, "Gravity database: Client %s found. Using groups (%s)",
 			          show_client_string(hwaddr, hostname, ip), getstr(client->groupspos));
 		}
 	}
@@ -1496,7 +1498,7 @@ bool gravityDB_get_regex_client_groups(clientsData *client, const unsigned int n
 	}
 
 	// Perform query
-	log_debug(DEBUG_REGEX, "Regex %s: Querying groups for client %s: \"%s\"", regextype[type], getstr(client->ippos), querystr);
+	log_debug(DEBUG_REGEX, "Regex %s: Querying associated regexes for client %s: \"%s\"", regextype[type], getstr(client->ippos), querystr);
 	while((rc = sqlite3_step(query_stmt)) == SQLITE_ROW)
 	{
 		const int result = sqlite3_column_int(query_stmt, 0);

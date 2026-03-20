@@ -1,7 +1,7 @@
-# Pi-hole configuration file (v6.4.1-55-g7208be13) on branch new/hide_connection_errors
+# Pi-hole configuration file (v6.5-5-g93080420-dirty) on branch fix/names_behind_router
 # Encoding: UTF-8
 # This file is managed by pihole-FTL
-# Last updated on 2025-12-21 11:13:49 UTC
+# Last updated on 2026-02-27 11:29:26 UTC
 
 [dns]
   # Upstream DNS Servers to be used by Pi-hole. If this is not set, Pi-hole will not
@@ -752,6 +752,20 @@
   #     true or false
   resolveIPv6 = false ### CHANGED, default = true
 
+  # Control whether FTL should attempt to obtain client names from the network table by
+  # MAC address.
+  #
+  #This can provide hostnames for devices that do not have a hostname or have multiple
+  # IP addresses (e.g. IPv4 and IPv6).
+  #However, MAC-derived names can be ambiguous (e.g., when a MAC appears for multiple
+  # IPs due to a router/NAT or MAC reuse), which may lead to incorrect hostnames being
+  # shown. Disabling this option can prevent such issues but may lead to more clients
+  # without hostnames.
+  #
+  # Allowed values are:
+  #     true or false
+  macNames = true
+
   # Control whether FTL should use the fallback option to try to obtain client names from
   # checking the network table. This behavior can be disabled with this option.
   #
@@ -964,7 +978,7 @@
   #     An array of HTTP headers
   headers = [
     "X-DNS-Prefetch-Control: off",
-    "Content-Security-Policy: default-src 'none'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; img-src 'self'; manifest-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+    "Content-Security-Policy: default-src 'none'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; img-src 'self'; manifest-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; form-action 'self'",
     "X-Frame-Options: DENY",
     "X-XSS-Protection: 0",
     "X-Content-Type-Options: nosniff",
@@ -1723,7 +1737,7 @@
   all = true ### CHANGED, default = false
 
 # Configuration statistics:
-# 166 total entries out of which 112 entries are default
+# 167 total entries out of which 113 entries are default
 # --> 54 entries are modified
 # 3 entries are forced through environment:
 #   - misc.nice
