@@ -571,10 +571,6 @@ int get_config_from_CLI(const char *key, const bool quiet)
 		    (!exactMatch && strncmp(item->k, key, strlen(key)))))
 			continue;
 
-		// Skip write-only options
-		if(item->f & FLAG_WRITE_ONLY)
-			continue;
-
 		// This is the config option we are looking for
 		conf_item = item;
 
@@ -584,9 +580,12 @@ int get_config_from_CLI(const char *key, const bool quiet)
 		if(key == NULL || strcmp(item->k, key) != 0)
 			printf("%s%s = ", is_default ? "" : red, item->k);
 
-		// Print value
-		if(conf_item-> f & FLAG_WRITE_ONLY)
-			puts("<write-only property>");
+		// Print value - for write-only items show "********" if set, nothing if not
+		if(conf_item->f & FLAG_WRITE_ONLY)
+		{
+			const bool is_set = conf_item->v.s != NULL && strlen(conf_item->v.s) > 0;
+			printf("%s", is_set ? PASSWORD_VALUE : "");
+		}
 		else
 			writeTOMLvalue(stdout, -1, conf_item->t, &conf_item->v);
 		puts(normal);

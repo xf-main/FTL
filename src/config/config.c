@@ -1212,7 +1212,7 @@ void initConfig(struct config *conf)
 	conf->webserver.api.password.c = validate_stub; // Only type-based checking
 
 	conf->webserver.api.totp_secret.k = "webserver.api.totp_secret";
-	conf->webserver.api.totp_secret.h = "Pi-hole 2FA TOTP secret. When set to something different than \"""\", 2FA authentication will be enforced for the API and the web interface. This setting is write-only, you can not read the secret back.";
+	conf->webserver.api.totp_secret.h = "Pi-hole 2FA TOTP secret. When set to something different than \"""\", 2FA authentication will be enforced for the API and the web interface. This setting is write-only, the secret itself cannot be read back, but the CLI will show \"" PASSWORD_VALUE "\" to indicate that 2FA is configured.";
 	conf->webserver.api.totp_secret.a = cJSON_CreateStringReference("A valid TOTP secret (20 Bytes in Base32 encoding)");
 	conf->webserver.api.totp_secret.t = CONF_STRING;
 	conf->webserver.api.totp_secret.f = FLAG_WRITE_ONLY | FLAG_INVALIDATE_SESSIONS;
