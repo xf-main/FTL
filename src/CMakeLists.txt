@@ -357,13 +357,20 @@ if(HAVE_RANDOM_H)
     target_compile_definitions(core PRIVATE USE_GETRANDOM)
 endif()
 
-check_include_file("execinfo.h" HAVE_EXECINFO_H)
-if(HAVE_EXECINFO_H)
-	message(STATUS "Building FTL with unwind support: YES")
-    target_compile_definitions(core PRIVATE USE_BACKTRACE)
+# <unwind.h> is part of GCC's libgcc — available on ALL targets (musl+glibc, static+dynamic)
+# _Unwind_Backtrace() is already linked via -lgcc/-static-libgcc; no find_library needed
+check_include_file("unwind.h" HAVE_UNWIND_H)
+if(HAVE_UNWIND_H)
+    target_compile_definitions(core PRIVATE USE_UNWIND)
+    message(STATUS "Building FTL with _Unwind_Backtrace support: YES")
 else()
-	message(STATUS "Building FTL with unwind support: NO")
+    message(STATUS "Building FTL with _Unwind_Backtrace support: NO")
 endif()
+
+# Embed the source root so crash backtraces can show project-relative paths
+# (e.g. "src/args.c" instead of "/home/user/FTL/src/args.c").
+target_compile_definitions(core PRIVATE SOURCE_ROOT="${CMAKE_SOURCE_DIR}/")
+
 
 
 option(USE_READLINE "Build FTL with readline support, if available" ON)

@@ -93,7 +93,25 @@ check_minimum_glibc_version() {
   echo "Minimum glibc version check: OK (${1})"
 }
 
-if [[ "${CI_ARCH}" == "linux/amd64" ]]; then
+check_crash() {
+  # Run the intentional-crash subcommand and capture combined stdout+stderr.
+  # The process exits non-zero (killed by SIGSEGV), so we suppress the error.
+  output="$(./pihole-FTL crash 2>&1 || true)"
+  if echo "$output" | grep -q "FTL crashed"; then
+    if echo "$output" | grep -q "Backtrace ("; then
+      echo "Crash handler test: OK (crash handler invoked, backtrace generated)"
+    else
+      # Handler ran but no backtrace — warn rather than fail.
+      # This can happen if addr2line is absent or the binary has no debug info.
+      echo "Crash handler test: WARNING (crash handler invoked, no backtrace)"
+    fi
+  else
+    echo "Crash handler test: FAILED (FTL crash handler was not invoked)"
+    okay=false
+  fi
+}
+
+if [[ "${CI_ARCH}" == "linux/amd64" || "${CI_ARCH}" == "" ]]; then
 
   if [[ "${STATIC}" == "true" ]]; then
     check_machine "ELF64" "Advanced Micro Devices X86-64"
@@ -102,7 +120,7 @@ if [[ "${CI_ARCH}" == "linux/amd64" ]]; then
     check_file "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), static-pie linked, with debug_info, not stripped"
 else
     check_machine "ELF64" "Advanced Micro Devices X86-64"
-    check_libs "[libgmp.so.10] [libidn2.so.0] [libc.musl-x86_64.so.1]"
+    check_libs "[libgmp.so.10] [libidn2.so.0] [libgcc_s.so.1] [libc.musl-x86_64.so.1]"
     check_file "ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-musl-x86_64.so.1, with debug_info, not stripped"
   fi
 
@@ -167,6 +185,8 @@ else
   exit 1
 
 fi
+
+check_crash
 
 if [[ "${okay}" == "false" ]]; then
   echo "Binary checks failed"

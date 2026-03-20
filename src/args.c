@@ -76,6 +76,9 @@
 #include "config/inotify.h"
 // get_all_supported_ciphersuites()
 #include "webserver/webserver.h"
+// mmap(), PROT_NONE, MAP_PRIVATE, MAP_ANONYMOUS — used for intentional crash
+// test
+#include <sys/mman.h>
 
 // defined in dnsmasq.c
 extern void print_dnsmasq_version(const char *yellow, const char *green, const char *bold, const char *normal);
@@ -252,6 +255,40 @@ void parse_args(int argc, char *argv[])
 	// caused by its inconsistent value across environments
 	if(argc == 2 && strcmp(argv[1], "sigrtmin") == 0)
 		exit(sigrtmin());
+
+	// Intentional crash test — used in CI to verify the crash handler and
+	// backtrace machinery work correctly.
+	// We use mmap(PROT_NONE) + a write to produce SIGSEGV SEGV_ACCERR.
+	// This is NOT undefined behaviour, NOT elided by the optimiser, and NOT
+	// intercepted by ASan or UBSan — unlike a raw null/invalid-pointer cast.
+	// handle_signals() and init_backtrace() are called here explicitly
+	// because parse_args() runs before main() sets them up.
+	if(argc == 2 && strcmp(argv[1], "crash") == 0)
+	{
+		cli_mode = true;
+		log_ctrl(false, true);
+		config.misc.addr2line.v.b = true; // Enable addr2line — config not loaded in subcommand context
+		handle_signals();
+		void *addr = mmap(NULL, 4096u, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+		if(addr != MAP_FAILED)
+		{
+			volatile char *ptr = (volatile char *)addr;
+			*ptr = 'x'; // Write to PROT_NONE page — SIGSEGV SEGV_ACCERR
+		}
+		raise(SIGSEGV); // Fallback: mmap should never fail in practice
+		exit(EXIT_FAILURE);
+	}
+
+	// Generate a backtrace without crashing — useful for manual inspection
+	// of the backtrace output on a given build/platform.
+	if(argc == 2 && strcmp(argv[1], "backtrace") == 0)
+	{
+		cli_mode = true;
+		log_ctrl(false, true);
+		config.misc.addr2line.v.b = true; // Enable addr2line — config not loaded in subcommand context
+		generate_backtrace();
+		exit(EXIT_SUCCESS);
+	}
 
 	// If the binary name is "sqlite3"  (e.g., symlink /usr/bin/sqlite3 -> /usr/bin/pihole-FTL),
 	// we operate in drop-in mode and consume all arguments for the embedded SQLite3 engine
@@ -1371,15 +1408,14 @@ void suggest_complete(const int argc, char *argv[])
 	{
 		// Root-level suggestion: "pihole-FTL ..."
 		const char *options[] = {
-			"arp-scan", "branch", "--config", "debug", "--default-gateway",
-			"dhcp-discover", "dnsmasq-test", "-f", "--gen-x509",
-			"gravity", "gzip", "help", "-h", "--help", "idn2",
-			"--list-dhcp4", "--list-dhcp6", "--lua", "--luac",
-			"lua", "luac", "ntp", "no-daemon", "--perf", "ptr",
-			"--read-x509", "--read-x509-key", "regex-test",
-			"sha256sum", "sqlite3", "sqlite3_rsync", "tag",
-			"--teleporter", "test", "--totp", "--tls-ciphers",
-			"-v", "-vv", "--v", "version", "verify",
+			"arp-scan", "branch", "backtrace", "crash", "--config", "debug",
+		    "--default-gateway", "dhcp-discover", "dnsmasq-test", "-f",
+		    "--gen-x509", "gravity", "gzip", "help", "-h", "--help", "idn2",
+			"--list-dhcp4", "--list-dhcp6", "--lua", "--luac", "lua",
+		    "luac", "ntp", "no-daemon", "--perf", "ptr", "--read-x509",
+		    "--read-x509-key", "regex-test", "sha256sum", "sqlite3",
+		    "sqlite3_rsync", "tag", "--teleporter", "test", "--totp",
+		    "--tls-ciphers", "-v", "-vv", "--v", "version", "verify",
 		};
 
 		// Provide matching suggestions

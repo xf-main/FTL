@@ -22,6 +22,7 @@ void handle_signals(void);
 void handle_realtime_signals(void);
 pid_t main_pid(void);
 void thread_sleepms(const enum thread_types thread, const int milliseconds);
+void init_backtrace(const char *argv0);
 void generate_backtrace(void);
 int sigtest(void);
 int sigrtmin(void);
