@@ -115,7 +115,7 @@ jobs:
       -
         name: Build FTL in ftl-build container (QEMU)
         # Creates an image to build FTL and load it into the local Docker daemon
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 #v3.0.2
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 #v4.0.0
         with:
           max_attempts: 3
           timeout_minutes: 15
@@ -134,7 +134,7 @@ jobs:
         name: Test FTL in ftl-build container (QEMU)
         # Uses the ftl-builder image to run tests
         # set STATIC to true for all except clang builds as we do in build.sh
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 #v3.0.2
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 #v4.0.0
         with:
           max_attempts: 3
           timeout_minutes: 10
@@ -265,7 +265,7 @@ jobs:
       -
         name: Attach binaries to release
         if: github.event_name == 'release'
-        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b #v2.5.0
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe #v2.6.1
         with:
           tag_name: ${{ github.event.release.tag_name }}
           files: |
