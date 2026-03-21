@@ -1,7 +1,7 @@
-# Pi-hole configuration file (v6.5-5-g93080420-dirty) on branch fix/names_behind_router
+# Pi-hole configuration file (v6.5-46-gb55cb419-dirty) on branch fix/print_totp_cli
 # Encoding: UTF-8
 # This file is managed by pihole-FTL
-# Last updated on 2026-02-27 11:29:26 UTC
+# Last updated on 2026-03-20 19:18:20 UTC
 
 [dns]
   # Upstream DNS Servers to be used by Pi-hole. If this is not set, Pi-hole will not
@@ -1149,9 +1149,10 @@
     #     A valid Pi-hole password hash
     pwhash = ""
 
-    # Pi-hole 2FA TOTP secret. When set to something different than "", 2FA authentication
-    # will be enforced for the API and the web interface. This setting is write-only, you
-    # can not read the secret back.
+    # Pi-hole 2FA TOTP secret. When set to something different than an empty string, 2FA
+    # authentication will be enforced for the API and the web interface. This setting is
+    # write-only, the secret itself cannot be read back, but the CLI will show "********"
+    # to indicate that 2FA is configured.
     #
     # Allowed values are:
     #     A valid TOTP secret (20 Bytes in Base32 encoding)
