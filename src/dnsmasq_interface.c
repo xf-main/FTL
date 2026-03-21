@@ -817,7 +817,12 @@ bool _FTL_new_query(const unsigned int flags, const char *name,
 		force_next_DNS_reply = REPLY_REFUSED;
 		blockingreason = "Rate-limiting";
 
-		// Do not further process this query, Pi-hole has never seen it
+		// Do not further process this query, Pi-hole has never seen it.
+		// Undo the client count increment from findClientID() above:
+		// no query record is created for rate-limited queries, so GC
+		// will never decrement this counter — leaving it permanently
+		// inflated for the lifetime of the process.
+		change_clientcount(client, -1, 0, -1, 0);
 		unlock_shm();
 		return true;
 	}
