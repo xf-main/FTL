@@ -64,6 +64,13 @@ static int run_and_stream_command(struct ftl_conn *api, const char *path, const 
 		// propagate to this child.
 		(void)setsid();
 
+		// Ignore SIGTERM so systemd's cgroup-level kill (the
+		// default KillMode=control-group sends SIGTERM to ALL
+		// processes in the cgroup) doesn't terminate gravity
+		// mid-run. SIG_IGN is preserved across execv(), unlike
+		// custom handlers which are reset to SIG_DFL.
+		signal(SIGTERM, SIG_IGN);
+
 		// Run pihole -g
 		execv(path, (char *const *)args);
 
