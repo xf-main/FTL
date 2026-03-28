@@ -42,7 +42,7 @@ bool get_process_name(const pid_t pid, char name[PROC_PATH_SIZ])
 	snprintf(filename, sizeof(filename), "/proc/%d/exe", pid);
 
 	// Read link destination
-	ssize_t len = readlink(filename, name, PROC_PATH_SIZ);
+	ssize_t len = readlink(filename, name, PROC_PATH_SIZ - 1);
 	if(len > 0)
 	{
 		// If readlink() succeeded, terminate string
