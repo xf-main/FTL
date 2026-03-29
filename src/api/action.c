@@ -22,6 +22,8 @@
 // flush_network_table()
 #include "database/network-table.h"
 #include "config/config.h"
+// gravity_running
+#include "daemon.h"
 
 static int run_and_stream_command(struct ftl_conn *api, const char *path, const char *const args[], const char *extra_env)
 {
@@ -56,6 +58,18 @@ static int run_and_stream_command(struct ftl_conn *api, const char *path, const 
 		// Set extra environment variable if requested
 		if(extra_env != NULL)
 			setenv(extra_env, "1", 1);
+
+		// Detach child into its own session/process group so signals
+		// sent to the parent's process group (like SIGTERM) do not
+		// propagate to this child.
+		(void)setsid();
+
+		// Ignore SIGTERM so systemd's cgroup-level kill (the
+		// default KillMode=control-group sends SIGTERM to ALL
+		// processes in the cgroup) doesn't terminate gravity
+		// mid-run. SIG_IGN is preserved across execv(), unlike
+		// custom handlers which are reset to SIG_DFL.
+		signal(SIGTERM, SIG_IGN);
 
 		// Run pihole -g
 		execv(path, (char *const *)args);
@@ -129,7 +143,16 @@ int api_action_gravity(struct ftl_conn *api)
 		get_bool_var(query, "color", &color);
 
 	const char *extra_env = color ? "FORCE_COLOR" : NULL;
-	return run_and_stream_command(api, "/usr/local/bin/pihole", (const char *const []){ "pihole", "-g", NULL }, extra_env);
+
+	gravity_running = 1;
+	const int ret = run_and_stream_command(api, "/usr/local/bin/pihole", (const char *const []){ "pihole", "-g", NULL }, extra_env);
+	gravity_running = 0;
+
+	// If a termination/restart was requested while gravity was running,
+	// act on it now rather than waiting up to ~1s for the GC thread to pick it up
+	check_if_want_terminate();
+
+	return ret;
 }
 
 int api_action_restartDNS(struct ftl_conn *api)
