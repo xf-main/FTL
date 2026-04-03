@@ -37,7 +37,7 @@
 #include "dnsmasq/config.h"
 
 // Function Prototypes
-static void nameToDNS(unsigned char *dns, const size_t dnslen, const char *host, const size_t hostlen) __attribute__((nonnull(1,3)));
+static size_t nameToDNS(unsigned char *dns, const size_t dnslen, const char *host, const size_t hostlen) __attribute__((nonnull(1,3)));
 static unsigned char *nameFromDNS(unsigned char *reader, unsigned char *buffer, uint16_t *count) __attribute__((malloc)) __attribute__((nonnull(1,2,3)));
 
 // Avoid "error: packed attribute causes inefficient alignment for ..." on ARM32
@@ -286,37 +286,27 @@ int create_socket(bool tcp, struct sockaddr_in *dest)
 // Perform a name lookup by sending a packet to ourselves
 static bool ngethostbyname(const int sock, const bool tcp, struct sockaddr_in *dest,
                            char hostn[MAXDOMAINLEN], const char *host, const char *ipaddr, bool *truncated)
-{
-	uint8_t buf[4096] = { 0 }; // buffer for DNS query
-	uint8_t *qname = NULL, *reader = NULL;
-	struct RES_RECORD answers[20] = { 0 }; // buffer for DNS replies
-	struct DNS_HEADER *dns = NULL;
-	struct QUESTION *qinfo = NULL;
-
-	// Set the DNS structure to standard queries
-	dns = (struct DNS_HEADER *)&buf;
-	dns->id = (unsigned short) htons(random()); // random query ID
-	dns->qr = 0; // This is a query
-	dns->opcode = 0; // This is a standard query
-	dns->aa = 0; // Not Authoritative
-	dns->tc = 0; // This message is not truncated
-	dns->rd = 1; // Recursion Desired
-	dns->ra = 0; // Recursion not available!
-	dns->z = 0; // Reserved
-	dns->ad = 0; // This is not an authenticated answer
-	dns->cd = 0; // Checking Disabled
-	dns->rcode = 0; // Response code
-	dns->q_count = htons(1); // 1 question
-	dns->ans_count = 0; // No answers
-	dns->auth_count = 0; // No authority
-	dns->add_count = 0; // No additional
-
-	// Point to the query portion
-	qname = &buf[sizeof(struct DNS_HEADER)];
+{	
+	// Initialize request DNS header
+	struct DNS_HEADER dns = { 0 };
+	dns.id = (unsigned short) htons(random()); // random query ID
+	dns.qr = 0; // This is a query
+	dns.opcode = 0; // This is a standard query
+	dns.aa = 0; // Not Authoritative
+	dns.tc = 0; // This message is not truncated
+	dns.rd = 1; // Recursion Desired
+	dns.ra = 0; // Recursion not available!
+	dns.z = 0; // Reserved
+	dns.ad = 0; // This is not an authenticated answer
+	dns.cd = 0; // Checking Disabled
+	dns.rcode = 0; // Response code
+	dns.q_count = htons(1); // 1 question
+	dns.ans_count = 0; // No answers
+	dns.auth_count = 0; // No authority
+	dns.add_count = 0; // No additional
 
 	// Make a copy of the hostname with two extra bytes for the length and
-	// the final dot, copy the hostname into it and convert to convert to
-	// DNS format
+	// the final dot (e.g., "www.google.com" -> "www.google.com.")
 	const size_t hnamelen = strlen(host) + 2;
 	char *hname = calloc(hnamelen, sizeof(char));
 	if(hname == NULL)
@@ -328,20 +318,32 @@ static bool ngethostbyname(const int sock, const bool tcp, struct sockaddr_in *d
 	strncat(hname, ".", hnamelen - strlen(hname));
 	hname[hnamelen - 1] = '\0';
 
-	nameToDNS(qname, sizeof(buf) - sizeof(struct DNS_HEADER), hname, hnamelen);
+	// Convert hostname to DNS format (e.g., 3www6google3com)
+	unsigned char dnsname[MAXDOMAINLEN] = { 0 };
+	const size_t dnslen = nameToDNS(dnsname, sizeof(dnsname), hname, hnamelen);
 	free(hname);
-	qinfo = (void*)&buf[sizeof(struct DNS_HEADER) + (strlen((const char*)qname) + 1)];
 
-	qinfo->qtype = htons(T_PTR); // Type of the query, A, MX, CNAME, NS etc
-	qinfo->qclass = htons(1); // IN
-	const size_t len = sizeof(struct DNS_HEADER) + (strlen((const char*)qname) + 1) + sizeof(struct QUESTION);
+	// Initialize query structure
+	struct QUESTION qinfo = { 0 };
+	qinfo.qtype = htons(T_PTR); // Type of the query, A, MX, CNAME, NS etc
+	qinfo.qclass = htons(1); // IN
+
+	// Build the DNS query packet for the given hostname
+	// Note: buf is later reused for receiving the response
+	uint8_t buf[4096] = { 0 };
+	memcpy(buf, &dns, sizeof(struct DNS_HEADER));
+	memcpy(buf + sizeof(struct DNS_HEADER), dnsname, dnslen);
+	memcpy(buf + sizeof(struct DNS_HEADER) + dnslen, &qinfo, sizeof(struct QUESTION));
+	const size_t len = sizeof(struct DNS_HEADER) + dnslen + sizeof(struct QUESTION);
 
 	// Log query in debug mode
 	log_debug(DEBUG_RESOLVER, "Resolving PTR \"%s\" on 127.0.0.1#%u (%s)",
 	          host, config.dns.port.v.u16, tcp ? "TCP" : "UDP");
 
+	// Send the query and receive the answer
 	if(!tcp)
 	{
+		// **** UDP ****
 		// Send the query
 		socklen_t addrlen = sizeof(*dest);
 		if(sendto(sock, buf, len, 0, (struct sockaddr*)dest, addrlen) < 0)
@@ -361,6 +363,7 @@ static bool ngethostbyname(const int sock, const bool tcp, struct sockaddr_in *d
 	}
 	else
 	{
+		// **** TCP ****
 		// Send the query
 		// For TCP streams, we first have to send the length of the data
 		// we are sending. The reason for this is that with TCP, we are
@@ -404,16 +407,16 @@ static bool ngethostbyname(const int sock, const bool tcp, struct sockaddr_in *d
 	}
 
 	// Parse the reply
-	dns = (struct DNS_HEADER*) buf;
+	memcpy(&dns, buf, sizeof(struct DNS_HEADER));
 	// Move ahead of the dns header and the query field
-	reader = &buf[len];
+	uint8_t *reader = &buf[len];
 
 	// Log the status of the query
 	log_debug(DEBUG_RESOLVER, "DNS query for PTR \"%s\" returned status %s (%i)",
-	          host, getDNScode(dns->rcode), dns->rcode);
+	          host, getDNScode(dns.rcode), dns.rcode);
 
 	// Abort if the query was not successful
-	if(dns->tc != 0)
+	if(dns.tc != 0)
 	{
 		log_debug(DEBUG_RESOLVER, " --> DNS response truncated");
 		if(truncated != NULL)
@@ -424,7 +427,8 @@ static bool ngethostbyname(const int sock, const bool tcp, struct sockaddr_in *d
 	// Start reading answers
 	uint16_t stop = 0;
 	bool have_name = false;
-	for(uint16_t i = 0; i < min(ntohs(dns->ans_count), ArraySize(answers)); i++)
+	struct RES_RECORD answers[20] = { 0 };
+	for(uint16_t i = 0; i < min(ntohs(dns.ans_count), ArraySize(answers)); i++)
 	{
 		answers[i].name = nameFromDNS(reader, buf, &stop);
 		reader = reader + stop;
@@ -466,7 +470,7 @@ static bool ngethostbyname(const int sock, const bool tcp, struct sockaddr_in *d
 			char *escaped_name = escape_string((char*)answers[i].rdata);
 			log_warn("Resolved PTR \"%s\" on 127.0.0.1#%u (%s) with status %s (%i): answer %u (PTR \"%s\" => \"%s\") is invalid",
 			         host, config.dns.port.v.u16, tcp ? "TCP" : "UDP",
-			         getDNScode(dns->rcode), dns->rcode, i, answers[i].name, escaped_name);
+			         getDNScode(dns.rcode), dns.rcode, i, answers[i].name, escaped_name);
 			log_hostname_warning(ipaddr, escaped_name, i);
 
 			// Discard this answer: free memory and set name to NULL
@@ -585,7 +589,7 @@ static u_char * __attribute__((malloc)) __attribute__((nonnull(1,2,3))) nameFrom
 // www.google.com -> 3www6google3com
 // We do not use DNS compression pointers here as we do not know if the DNS
 // server we are talking to supports them
-static void __attribute__((nonnull(1,3))) nameToDNS(unsigned char *dns, const size_t dnslen, const char *host, const size_t hostlen)
+static size_t __attribute__((nonnull(1,3))) nameToDNS(unsigned char *dns, const size_t dnslen, const char *host, const size_t hostlen)
 {
 	unsigned int lock = 0;
 	const unsigned char *dns_start = dns;
@@ -607,6 +611,8 @@ static void __attribute__((nonnull(1,3))) nameToDNS(unsigned char *dns, const si
 
 	// Terminate the string at the end
 	*dns++ = '\0';
+
+	return dns - dns_start;
 }
 
 bool resolveHostname(const int sock, const bool tcp, struct sockaddr_in *dest,

@@ -410,7 +410,7 @@ void initConfig(struct config *conf)
 	conf->dns.upstreams.t = CONF_JSON_STRING_ARRAY;
 	conf->dns.upstreams.d.json = cJSON_CreateArray();
 	conf->dns.upstreams.f = FLAG_RESTART_FTL;
-	conf->dns.upstreams.c = validate_stub; // Type-based checking + dnsmasq syntax checking
+	conf->dns.upstreams.c = validate_array_no_newline;
 
 	conf->dns.CNAMEdeepInspect.k = "dns.CNAMEdeepInspect";
 	conf->dns.CNAMEdeepInspect.h = "Use this option to control deep CNAME inspection. Disabling it might be beneficial for very low-end devices";
@@ -537,7 +537,7 @@ void initConfig(struct config *conf)
 	conf->dns.hostRecord.t = CONF_STRING;
 	conf->dns.hostRecord.f = FLAG_RESTART_FTL;
 	conf->dns.hostRecord.d.s = (char*)"";
-	conf->dns.hostRecord.c = validate_stub; // Type-based checking + dnsmasq syntax checking
+	conf->dns.hostRecord.c = validate_str_no_newline;
 
 	conf->dns.listeningMode.k = "dns.listeningMode";
 	conf->dns.listeningMode.h = "Pi-hole interface listening modes";
@@ -641,7 +641,7 @@ void initConfig(struct config *conf)
 	conf->dns.cache.rrtype.t = CONF_STRING;
 	conf->dns.cache.rrtype.f = FLAG_RESTART_FTL;
 	conf->dns.cache.rrtype.d.s = (char*)"ANY";
-	conf->dns.cache.rrtype.c = validate_stub; // Only type-based checking
+	conf->dns.cache.rrtype.c = validate_str_no_newline;
 	
 	// sub-struct dns.blocking
 	conf->dns.blocking.active.k = "dns.blocking.active";
@@ -816,7 +816,7 @@ void initConfig(struct config *conf)
 	conf->dhcp.leaseTime.t = CONF_STRING;
 	conf->dhcp.leaseTime.f = FLAG_RESTART_FTL;
 	conf->dhcp.leaseTime.d.s = (char*)"";
-	conf->dhcp.leaseTime.c = validate_stub; // Type-based checking + dnsmasq syntax checking
+	conf->dhcp.leaseTime.c = validate_str_no_newline;
 
 	conf->dhcp.ipv6.k = "dhcp.ipv6";
 	conf->dhcp.ipv6.h = "Should Pi-hole make an attempt to also satisfy IPv6 address requests (be aware that IPv6 works a whole lot different than IPv4)";
@@ -859,7 +859,7 @@ void initConfig(struct config *conf)
 	conf->dhcp.hosts.t = CONF_JSON_STRING_ARRAY;
 	conf->dhcp.hosts.f = FLAG_RESTART_FTL;
 	conf->dhcp.hosts.d.json = cJSON_CreateArray();
-	conf->dhcp.hosts.c = validate_stub; // Type-based checking + dnsmasq syntax checking
+	conf->dhcp.hosts.c = validate_array_no_newline;
 
 
 	// struct ntp
@@ -947,6 +947,12 @@ void initConfig(struct config *conf)
 	conf->resolver.resolveIPv6.t = CONF_BOOL;
 	conf->resolver.resolveIPv6.d.b = true;
 	conf->resolver.resolveIPv6.c = validate_stub; // Only type-based checking
+
+	conf->resolver.macNames.k = "resolver.macNames";
+	conf->resolver.macNames.h = "Control whether FTL should attempt to obtain client names from the network table by MAC address.\n\nThis can provide hostnames for devices that do not have a hostname or have multiple IP addresses (e.g. IPv4 and IPv6).\nHowever, MAC-derived names can be ambiguous (e.g., when a MAC appears for multiple IPs due to a router/NAT or MAC reuse), which may lead to incorrect hostnames being shown. Disabling this option can prevent such issues but may lead to more clients without hostnames.";
+	conf->resolver.macNames.t = CONF_BOOL;
+	conf->resolver.macNames.d.b = true;
+	conf->resolver.macNames.c = validate_stub; // Only type-based checking
 
 	conf->resolver.resolveIPv4.k = "resolver.resolveIPv4";
 	conf->resolver.resolveIPv4.h = "Should FTL try to resolve IPv4 addresses to hostnames?";
@@ -1078,7 +1084,7 @@ void initConfig(struct config *conf)
 	conf->webserver.headers.f = FLAG_RESTART_FTL;
 	conf->webserver.headers.d.json = cJSON_CreateArray();
 	cJSON_AddItemToArray(conf->webserver.headers.d.json, cJSON_CreateStringReference("X-DNS-Prefetch-Control: off"));
-	cJSON_AddItemToArray(conf->webserver.headers.d.json, cJSON_CreateStringReference("Content-Security-Policy: default-src 'none'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; img-src 'self'; manifest-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"));
+	cJSON_AddItemToArray(conf->webserver.headers.d.json, cJSON_CreateStringReference("Content-Security-Policy: default-src 'none'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; img-src 'self'; manifest-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; form-action 'self'"));
 	cJSON_AddItemToArray(conf->webserver.headers.d.json, cJSON_CreateStringReference("X-Frame-Options: DENY"));
 	cJSON_AddItemToArray(conf->webserver.headers.d.json, cJSON_CreateStringReference("X-XSS-Protection: 0"));
 	cJSON_AddItemToArray(conf->webserver.headers.d.json, cJSON_CreateStringReference("X-Content-Type-Options: nosniff"));
@@ -1206,7 +1212,7 @@ void initConfig(struct config *conf)
 	conf->webserver.api.password.c = validate_stub; // Only type-based checking
 
 	conf->webserver.api.totp_secret.k = "webserver.api.totp_secret";
-	conf->webserver.api.totp_secret.h = "Pi-hole 2FA TOTP secret. When set to something different than \"""\", 2FA authentication will be enforced for the API and the web interface. This setting is write-only, you can not read the secret back.";
+	conf->webserver.api.totp_secret.h = "Pi-hole 2FA TOTP secret. When set to something different than an empty string, 2FA authentication will be enforced for the API and the web interface. This setting is write-only, the secret itself cannot be read back, but the CLI will show \"" PASSWORD_VALUE "\" to indicate that 2FA is configured.";
 	conf->webserver.api.totp_secret.a = cJSON_CreateStringReference("A valid TOTP secret (20 Bytes in Base32 encoding)");
 	conf->webserver.api.totp_secret.t = CONF_STRING;
 	conf->webserver.api.totp_secret.f = FLAG_WRITE_ONLY | FLAG_INVALIDATE_SESSIONS;
@@ -1424,7 +1430,7 @@ void initConfig(struct config *conf)
 	conf->misc.dnsmasq_lines.t = CONF_JSON_STRING_ARRAY;
 	conf->misc.dnsmasq_lines.f = FLAG_RESTART_FTL;
 	conf->misc.dnsmasq_lines.d.json = cJSON_CreateArray();
-	conf->misc.dnsmasq_lines.c = validate_stub; // Type-based checking + dnsmasq syntax checking
+	conf->misc.dnsmasq_lines.c = validate_array_no_newline;
 
 	conf->misc.extraLogging.k = "misc.extraLogging";
 	conf->misc.extraLogging.h = "Log additional information about queries and replies to pihole.log\n\n When this setting is enabled, the log has extra information at the start of each line. This consists of a serial number which ties together the log lines associated with an individual query, and the IP address of the requestor. This setting is only effective if dns.queryLogging is enabled, too. This option is only useful for debugging and is not recommended for normal use.";

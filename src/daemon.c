@@ -47,6 +47,8 @@
 pthread_t threads[THREADS_MAX] = { 0 };
 bool resolver_ready = false;
 bool dnsmasq_failed = false;
+volatile sig_atomic_t gravity_running = 0;
+volatile sig_atomic_t want_terminate = 0;
 
 void go_daemon(void)
 {
@@ -156,6 +158,11 @@ void savePID(void)
  */
 static void removePID(void)
 {
+	// Config may not have been loaded (e.g. crash/backtrace subcommands),
+	// in which case no PID file was ever written — nothing to remove.
+	if(config.files.pid.v.s == NULL)
+		return;
+
 	FILE *f = NULL;
 	// Open file for writing to overwrite/empty it
 	if((f = fopen(config.files.pid.v.s, "w")) == NULL)

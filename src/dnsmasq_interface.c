@@ -44,7 +44,7 @@
 #include <stddef.h>
 // logg_rate_limit_message()
 #include "database/message-table.h"
-// http_init()
+// http_init(), webserver_thread()
 #include "webserver/webserver.h"
 // type struct sqlite3_stmt_vec
 #include "vector.h"
@@ -58,6 +58,8 @@
 #include "ntp/ntp.h"
 // get_process_name()
 #include "procps.h"
+// init_api_sessions()
+#include "api/api.h"
 
 // Private prototypes
 static void print_flags(const unsigned int flags);
@@ -815,7 +817,12 @@ bool _FTL_new_query(const unsigned int flags, const char *name,
 		force_next_DNS_reply = REPLY_REFUSED;
 		blockingreason = "Rate-limiting";
 
-		// Do not further process this query, Pi-hole has never seen it
+		// Do not further process this query, Pi-hole has never seen it.
+		// Undo the client count increment from findClientID() above:
+		// no query record is created for rate-limited queries, so GC
+		// will never decrement this counter — leaving it permanently
+		// inflated for the lifetime of the process.
+		change_clientcount(client, -1, 0, -1, 0);
 		unlock_shm();
 		return true;
 	}
@@ -3325,6 +3332,11 @@ void FTL_fork_and_bind_sockets(struct passwd *ent_pw, bool dnsmasq_start)
 	// Start NTP sync thread
 	ntp_start_sync_thread(&attr);
 
+	// Restore sessions from database before starting the database thread to
+	// ensure that sessions import is not blocked by asynchronous query
+	// import in the database thread
+	init_api_sessions();
+
 	// Start database thread if database is used
 	if(pthread_create( &threads[DB], &attr, DB_thread, NULL ) != 0)
 	{
@@ -3359,12 +3371,17 @@ void FTL_fork_and_bind_sockets(struct passwd *ent_pw, bool dnsmasq_start)
 		exit(EXIT_FAILURE);
 	}
 
+#ifdef HAVE_MBEDTLS
 	// Start webserver thread
 	if(pthread_create( &threads[WEBSERVER], &attr, webserver_thread, NULL ) != 0)
 	{
 		log_crit("Unable to create webserver thread. Exiting...");
 		exit(EXIT_FAILURE);
 	}
+#else
+	// Initialize FTL HTTP server
+	http_init();
+#endif /* HAVE_MBEDTLS */
 
 	// Chown files if FTL started as user root but a dnsmasq config
 	// option states to run as a different user/group (e.g. "nobody")

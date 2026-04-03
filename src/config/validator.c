@@ -127,6 +127,7 @@ bool validate_dns_hosts(union conf_value *val, const char *key, char err[VALIDAT
 
 // Validate the dns.cnames array
 // Each entry needs to be a string in form "<cname>,[<cname>,]<target>[,<TTL>]"
+// Newline characters are not allowed in any of the entries
 bool validate_dns_cnames(union conf_value *val, const char *key, char err[VALIDATOR_ERRBUF_LEN])
 {
 	if(!cJSON_IsArray(val->json))
@@ -173,6 +174,18 @@ bool validate_dns_cnames(union conf_value *val, const char *key, char err[VALIDA
 		{
 			snprintf(err, VALIDATOR_ERRBUF_LEN, "%s[%d]: not a valid CNAME definition (too few elements)", key, i);
 			return false;
+		}
+
+		// Check if the string contains newline characters
+		const unsigned int len = strlen(item->valuestring);
+		for(unsigned int k = 0; k < len; k++)
+		{
+			if(item->valuestring[k] == '\n' || item->valuestring[k] == '\r')
+			{
+				snprintf(err, VALIDATOR_ERRBUF_LEN, "%s[%d]: contains newline characters",
+				         key, i);
+				return false;
+			}
 		}
 	}
 
@@ -539,6 +552,19 @@ bool validate_dns_revServers(union conf_value *val, const char *key, char err[VA
 			free(str);
 			return false;
 		}
+
+		// Ensure there are no newline characters in the entry
+		const unsigned int len = strlen(item->valuestring);
+		for(unsigned int k = 0; k < len; k++)
+		{
+			if(item->valuestring[k] == '\n' || item->valuestring[k] == '\r')
+			{
+				snprintf(err, VALIDATOR_ERRBUF_LEN, "%s[%d]: contains newline characters",
+				         key, i);
+				free(str);
+				return false;
+			}
+		}
 	}
 
 	// Return success
@@ -698,4 +724,70 @@ bool validate_dns_domain_or_ip(union conf_value *val, const char *key, char err[
 	// If neither, return an error
 	snprintf(err, VALIDATOR_ERRBUF_LEN, "%s: neither a valid domain nor IP address", key);
 	return false;
+}
+
+bool validate_str_no_newline(union conf_value *val, const char *key, char err[VALIDATOR_ERRBUF_LEN])
+{
+	if(val->s == NULL)
+	{
+		snprintf(err, VALIDATOR_ERRBUF_LEN, "%s: null string", key);
+		return false;
+	}
+
+	// Check if the string contains newline characters
+	const unsigned int len = strlen(val->s);
+	for(unsigned int i = 0; i < len; i++)
+	{
+		if(val->s[i] == '\n' || val->s[i] == '\r')
+		{
+			snprintf(err, VALIDATOR_ERRBUF_LEN, "%s: contains newline characters", key);
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool validate_array_no_newline(union conf_value *val, const char *key, char err[VALIDATOR_ERRBUF_LEN])
+{
+	if(!cJSON_IsArray(val->json))
+	{
+		snprintf(err, VALIDATOR_ERRBUF_LEN, "%s: not an array", key);
+		return false;
+	}
+
+	for(int i = 0; i < cJSON_GetArraySize(val->json); i++)
+	{
+		// Get array item
+		cJSON *item = cJSON_GetArrayItem(val->json, i);
+
+		// Check if it's a string
+		if(!cJSON_IsString(item))
+		{
+			snprintf(err, VALIDATOR_ERRBUF_LEN, "%s[%d]: not a string",
+			         key, i);
+			return false;
+		}
+
+		if(item->valuestring == NULL)
+		{
+			snprintf(err, VALIDATOR_ERRBUF_LEN, "%s[%d]: null string",
+			         key, i);
+			return false;
+		}
+
+		// Check if the string contains newline characters
+		const unsigned int len = strlen(item->valuestring);
+		for(unsigned int j = 0; j < len; j++)
+		{
+			if(item->valuestring[j] == '\n' || item->valuestring[j] == '\r')
+			{
+				snprintf(err, VALIDATOR_ERRBUF_LEN, "%s[%d]: contains newline characters",
+				         key, i);
+				return false;
+			}
+		}
+	}
+
+	return true;
 }

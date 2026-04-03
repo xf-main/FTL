@@ -14,7 +14,7 @@
 #include <stdbool.h>
 #include <sys/types.h>
 
-#define PROC_PATH_SIZ  32
+#define PROC_PATH_SIZ 64
 
 bool get_process_name(const pid_t pid, char name[PROC_PATH_SIZ]);
 bool another_FTL(void);

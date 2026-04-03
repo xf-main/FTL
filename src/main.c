@@ -55,6 +55,11 @@ int main (int argc, char *argv[])
 	// Obtain log file location
 	getLogFilePath(true);
 
+	// Store binary path and PIE load base address for crash-time backtrace.
+	// Must be called before handle_signals() so bin_path is populated before
+	// the first possible signal.
+	init_backtrace(argc > 0 ? argv[0] : NULL);
+
 	// Parse arguments
 	// We run this also for no direct arguments
 	// to have arg{c,v}_dnsmasq initialized

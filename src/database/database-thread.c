@@ -36,6 +36,8 @@
 #include "database/sqlite3-ext.h"
 // PRId64
 #include <inttypes.h>
+// db_import_done
+#include "gc.h"
 
 static bool analyze_database(sqlite3 *db)
 {
@@ -152,6 +154,9 @@ void *DB_thread(void *val)
 	// Asynchronously import queries from the on-disk database
 	if(config.database.DBimport.v.b)
 		DB_read_queries();
+
+	// Signify that the import is done, so garbage collection will run
+	db_import_done = true;
 
 	// Log some information about the imported queries (if any)
 	log_counter_info();

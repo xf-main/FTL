@@ -87,7 +87,7 @@ jobs:
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@9e907b5e64f6b83e7804b09294d44122997950d6 #v4.32.3
+      uses: github/codeql-action/init@c10b8064de6f491fea524254123dbe5e09572f13 #v4.35.1
       with:
         languages: ${{ matrix.language }}
         build-mode: ${{ matrix.build-mode }}
@@ -110,14 +110,14 @@ jobs:
         ./build.sh
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@9e907b5e64f6b83e7804b09294d44122997950d6 #v4.32.3
+      uses: github/codeql-action/analyze@c10b8064de6f491fea524254123dbe5e09572f13 #v4.35.1
       with:
         category: "/language:${{matrix.language}}"
         upload: failure-only # upload only in case of failure, otherwise upload later after filtering
         output: codeql-results
     
     - name: Filter SARIF
-      uses: advanced-security/filter-sarif@f3b8118a9349d88f7b1c0c488476411145b6270d #v1.0.1
+      uses: advanced-security/filter-sarif@2da736ff05ef065cb2894ac6892e47b5eac2c3c0 #v1.1.0.1.1
       with:
         # filter out third-party dependencies
         patterns: |
@@ -136,13 +136,13 @@ jobs:
         output: codeql-results/cpp.sarif
 
     - name: Upload SARIF
-      uses: github/codeql-action/upload-sarif@9e907b5e64f6b83e7804b09294d44122997950d6 #v4.32.3
+      uses: github/codeql-action/upload-sarif@c10b8064de6f491fea524254123dbe5e09572f13 #v4.35.1
       with:
         sarif_file: codeql-results/cpp.sarif
 
     - name: Upload CodeQL results as an artifact
       if: success() || failure()
-      uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f #v6.0.0
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f #v7.0.0
       with:
         name: codeql-results
         path: codeql-results
