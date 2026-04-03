@@ -17,6 +17,7 @@ from libs.FTLAPI import FTLAPI
 from libs.responseVerifyer import ResponseVerifyer
 
 TRACE = False
+CLI_PW_FILE = "/etc/pihole/cli_pw"
 
 def main():
 	# OpenAPI specs are split into multiple files, this script extracts the endpoints from them
@@ -100,6 +101,33 @@ def main():
 				print("  - " + error)
 			errs[2] += len(errors)
 		print("")
+
+	# Verify that Teleporter import is blocked for CLI sessions
+	print("Verifying FTL Teleporter import is blocked for CLI sessions...")
+	try:
+		with open(CLI_PW_FILE, "r", encoding="utf-8") as file:
+			cli_password = file.read().strip()
+	except FileNotFoundError:
+		cli_password = None
+
+	if cli_password is None or len(cli_password) == 0:
+		print("  Skipping (no CLI password available)")
+	else:
+		try:
+			ftl_cli = FTLAPI("http://127.0.0.1", cli_password)
+			response = ftl_cli.POST("/api/teleporter", json_data=None, files={"file": ('teleporter.zip', teleporter, 'application/zip')})
+			if response is None:
+				print("  Error: no response from FTL API")
+				errs[2] += 1
+			elif "error" not in response or response["error"].get("key") != "forbidden":
+				print("  Error: expected forbidden error, got: " + str(response))
+				errs[2] += 1
+			else:
+				print("  POST /api/teleporter (CLI session): OK (blocked)")
+		except Exception as e:
+			print("  Exception: " + str(e))
+			errs[2] += 1
+	print("")
 
 	# Print the number error (if any)
 	if errs[0] > 0:
