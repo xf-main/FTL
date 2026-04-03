@@ -410,7 +410,7 @@ void initConfig(struct config *conf)
 	conf->dns.upstreams.t = CONF_JSON_STRING_ARRAY;
 	conf->dns.upstreams.d.json = cJSON_CreateArray();
 	conf->dns.upstreams.f = FLAG_RESTART_FTL;
-	conf->dns.upstreams.c = validate_stub; // Type-based checking + dnsmasq syntax checking
+	conf->dns.upstreams.c = validate_array_no_newline;
 
 	conf->dns.CNAMEdeepInspect.k = "dns.CNAMEdeepInspect";
 	conf->dns.CNAMEdeepInspect.h = "Use this option to control deep CNAME inspection. Disabling it might be beneficial for very low-end devices";
@@ -537,7 +537,7 @@ void initConfig(struct config *conf)
 	conf->dns.hostRecord.t = CONF_STRING;
 	conf->dns.hostRecord.f = FLAG_RESTART_FTL;
 	conf->dns.hostRecord.d.s = (char*)"";
-	conf->dns.hostRecord.c = validate_stub; // Type-based checking + dnsmasq syntax checking
+	conf->dns.hostRecord.c = validate_str_no_newline;
 
 	conf->dns.listeningMode.k = "dns.listeningMode";
 	conf->dns.listeningMode.h = "Pi-hole interface listening modes";
@@ -641,7 +641,7 @@ void initConfig(struct config *conf)
 	conf->dns.cache.rrtype.t = CONF_STRING;
 	conf->dns.cache.rrtype.f = FLAG_RESTART_FTL;
 	conf->dns.cache.rrtype.d.s = (char*)"ANY";
-	conf->dns.cache.rrtype.c = validate_stub; // Only type-based checking
+	conf->dns.cache.rrtype.c = validate_str_no_newline;
 	
 	// sub-struct dns.blocking
 	conf->dns.blocking.active.k = "dns.blocking.active";
@@ -816,7 +816,7 @@ void initConfig(struct config *conf)
 	conf->dhcp.leaseTime.t = CONF_STRING;
 	conf->dhcp.leaseTime.f = FLAG_RESTART_FTL;
 	conf->dhcp.leaseTime.d.s = (char*)"";
-	conf->dhcp.leaseTime.c = validate_stub; // Type-based checking + dnsmasq syntax checking
+	conf->dhcp.leaseTime.c = validate_str_no_newline;
 
 	conf->dhcp.ipv6.k = "dhcp.ipv6";
 	conf->dhcp.ipv6.h = "Should Pi-hole make an attempt to also satisfy IPv6 address requests (be aware that IPv6 works a whole lot different than IPv4)";
@@ -859,7 +859,7 @@ void initConfig(struct config *conf)
 	conf->dhcp.hosts.t = CONF_JSON_STRING_ARRAY;
 	conf->dhcp.hosts.f = FLAG_RESTART_FTL;
 	conf->dhcp.hosts.d.json = cJSON_CreateArray();
-	conf->dhcp.hosts.c = validate_stub; // Type-based checking + dnsmasq syntax checking
+	conf->dhcp.hosts.c = validate_array_no_newline;
 
 
 	// struct ntp
@@ -1430,7 +1430,7 @@ void initConfig(struct config *conf)
 	conf->misc.dnsmasq_lines.t = CONF_JSON_STRING_ARRAY;
 	conf->misc.dnsmasq_lines.f = FLAG_RESTART_FTL;
 	conf->misc.dnsmasq_lines.d.json = cJSON_CreateArray();
-	conf->misc.dnsmasq_lines.c = validate_stub; // Type-based checking + dnsmasq syntax checking
+	conf->misc.dnsmasq_lines.c = validate_array_no_newline;
 
 	conf->misc.extraLogging.k = "misc.extraLogging";
 	conf->misc.extraLogging.h = "Log additional information about queries and replies to pihole.log\n\n When this setting is enabled, the log has extra information at the start of each line. This consists of a serial number which ties together the log lines associated with an individual query, and the IP address of the requestor. This setting is only effective if dns.queryLogging is enabled, too. This option is only useful for debugging and is not recommended for normal use.";
